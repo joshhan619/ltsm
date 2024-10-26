@@ -6,7 +6,8 @@ import argparse
 import random
 import ipdb
 
-from ltsm.data_provider.data_factory import get_data_loaders, get_datasets,get_test_datasets
+from ltsm.data_provider.data_factory import get_data_loaders, get_datasets
+from ltsm.data_reader.csv_reader import transform_csv_dataset
 from ltsm.data_provider.data_loader import HF_Dataset
 from ltsm.models import get_model, LTSMConfig
 from peft import get_peft_config, get_peft_model, LoraConfig
@@ -182,8 +183,18 @@ def run(args):
         push_to_hub=False,
         load_best_model_at_end=True,
     )
-    
-    train_dataset, eval_dataset, _ = get_datasets(args)
+
+
+    new_data_paths = []
+    for data_path in args.data_path:
+        new_path = data_path.split("/")
+        new_path[-3] += "_transformed"
+        new_path = "/".join(new_path)
+        new_data_paths.append(new_path)
+        print(os.path.dirname(data_path), os.path.dirname(new_path))
+        transform_csv_dataset(os.path.dirname(data_path), os.path.dirname(new_path))
+    args.data_path = new_data_paths
+    train_dataset, eval_dataset, test_datasets = get_datasets(args)
     train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
     
     trainer = Trainer(
@@ -208,12 +219,9 @@ def run(args):
         trainer.save_state()
 
     # Testing settings
-    for data_path in args.test_data_path_list:
+    for test_dataset in test_datasets:
         trainer.compute_loss = compute_loss
-        trainer.prediction_step = prediction_step   
-        args.test_data_path = data_path
-        test_dataset, _ = get_test_datasets(args)
-        test_dataset = HF_Dataset(test_dataset)
+        trainer.prediction_step = prediction_step
 
         metrics = trainer.evaluate(test_dataset)
         trainer.log_metrics("Test", metrics)
