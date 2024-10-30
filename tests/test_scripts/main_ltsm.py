@@ -184,17 +184,7 @@ def run(args):
         load_best_model_at_end=True,
     )
 
-
-    new_data_paths = []
-    for data_path in args.data_path:
-        new_path = data_path.split("/")
-        new_path[-3] += "_transformed"
-        new_path = "/".join(new_path)
-        new_data_paths.append(new_path)
-        print(os.path.dirname(data_path), os.path.dirname(new_path))
-        transform_csv_dataset(os.path.dirname(data_path), os.path.dirname(new_path))
-    args.data_path = new_data_paths
-    train_dataset, eval_dataset, test_datasets = get_datasets(args)
+    train_dataset, eval_dataset, test_datasets, _ = get_datasets(args)
     train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
     
     trainer = Trainer(

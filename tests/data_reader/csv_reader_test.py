@@ -5,27 +5,102 @@ import os
 import pandas as pd
 import numpy as np
 
-def test_csv_reader_NA(tmp_path):
+@pytest.fixture
+def setup_csvreader_data():
+    dfs = [
+        pd.DataFrame([
+            ['Updated Time', 'Suction Pressure', 'Suction temp', 'Condenser In'],
+            ['6/30/2023 19:01:24', 0, 1, 98.34],
+            ['6/30/2023 19:03:04', 0, 3, 98.93],
+            ['6/30/2023 19:04:44', 0, 2, 97.90],
+            ['6/30/2023 19:06:22', 2, 3, 98.37],
+            ['6/30/2023 19:08:03', 3, 1, 98.37]
+        ]),
+        pd.DataFrame([
+            ['Updated Time', 'Suction Pressure', 'Suction temp', 'Condenser In', 'Condenser Out'],
+            ['6/30/2023 19:09:43', 1, 2, 98.43, 109.31],
+            ['6/30/2023 19:11:23', 1, 3, 97.64, 109.18],
+            ['6/30/2023 19:13:02', 1, 4, np.nan, 109.18],
+            ['6/30/2023 19:15:32', 1, 5, np.nan, np.nan],
+            ['6/30/2023 19:17:41', 1, 6, 95.32, 109.18],
+            ['6/30/2023 19:17:41', 1, np.nan, 95.32, 110.20]
+        ]),
+        pd.DataFrame([
+            ['Updated Time', 'Suction Pressure', 'Suction temp'],
+            ['6/30/2023 19:01:24', 61.71, 102.75],
+            ['6/30/2023 19:03:04', 69.21, 103.19],
+            ['6/30/2023 19:04:44', 71.35, 103.34],
+            ['6/30/2023 19:06:22', 68.14, 102.60],
+            ['6/30/2023 19:08:03', 83.47, 103.26],
+            ['6/30/2023 19:09:43', 63.14, 103.85]
+        ]),
+        pd.DataFrame([
+            [0, 1, 2, 3, 4, 5, 6],
+            [61.71, 102.75, np.nan, 109.73, 110.81, 111.32, np.nan],
+            [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 98.30],
+            [55.31, 71.35, 103.34, np.nan, 108.87, 109.32],
+            [np.nan, np.nan, 100.32, 102.60, 98.37, np.nan, np.nan],
+        ])
+    ]
+
+    dfs_expected = [
+        pd.DataFrame({
+            0: [0, 1, 98.34],
+            1: [0, 3, 98.93],
+            2: [0, 2, 97.90],
+            3: [2, 3, 98.37],
+            4: [3, 1, 98.37]
+        }, index=["Suction Pressure", "Suction temp", "Condenser In"]),
+        pd.DataFrame({
+            0: [1, 2, 98.43, 109.31],
+            1: [1, 3, 97.64, 109.18],
+            2: [1, 4, 96.866667, 109.18],
+            3: [1, 5, 96.093333, 109.18],
+            4: [1, 6, 95.32, 109.18],
+            5: [1, 6, 95.32, 110.20]
+        }, index=["Suction Pressure", "Suction temp", "Condenser In", "Condenser Out"]),
+        pd.DataFrame({
+            0: [61.71, 102.75],
+            1: [69.21, 103.19],
+            2: [71.35, 103.34],
+            3: [68.14, 102.60],
+            4: [83.47, 103.26],
+            5: [63.14, 103.85]
+        }, index=['Suction Pressure', 'Suction temp']),
+        pd.DataFrame({
+            0: [61.71, 98.30, 55.31, 100.32],
+            1: [102.75, 98.30, 71.35, 100.32],
+            2: [106.24, 98.30, 103.34, 100.32],
+            3: [109.73, 98.30, 106.105, 102.6],
+            4: [110.81, 98.30, 108.87, 98.37],
+            5: [111.32, 98.30, 109.32, 98.37],
+            6: [111.32, 98.30, 109.32, 98.37]
+        })
+    ]
+
+    return dfs, dfs_expected
+
+
+def test_csv_reader_NA(tmp_path, setup_csvreader_data, mocker):
+    dfs, dfs_expected = setup_csvreader_data
     d = tmp_path / "na_test.csv"
-    d.write_text("0,1,2,3,4,5,6\n1.,,2.,,,5.,5.\n2.,,4.,,6.,8.,\n1.,1.,1.,1.,,1.,1.\n")
+    d.write_text("")
     csv_reader = CSVReader(str(d))
-    df = csv_reader.fetch()
-    assert df.iloc[0, 1] == 1.5
-    assert df.iloc[0, 3] == 3
-    assert df.iloc[0, 4] == 4
-    assert df.iloc[1, 1] == 3
-    assert df.iloc[1, 3] == 5
-    assert df.iloc[1, 6] == 8
-    assert df.iloc[2, 4] == 1
-    assert df.isna().to_numpy().sum() == 0
+    for input_df, expected_df in zip(dfs, dfs_expected):
+        mocker.patch('pandas.read_csv', return_value=input_df)
+        result_df = csv_reader.fetch()
+        try:
+            pd.testing.assert_frame_equal(result_df, expected_df,
+                                      check_dtype=False,)
+        except AssertionError as e:
+            raise AssertionError("Data transformation did not produce the expected output.") from e
 
 def test_csv_reader_columns(tmp_path):
     d = tmp_path / "col_names_test.csv"
-    d.write_text("0,1,2.2,2016-08-25 15:32:00,2016-08-25 15:33:00,LABEL,05-13-2023\n,1.,1.,1.,1.,1.,1.,hi\n")
+    d.write_text("0, 1, 2, 3, 4,LABEL\n1.,1.,1.,1.,1.,hello\n 2, 3, 4, 5, 6,world")
     csv_reader = CSVReader(str(d))
     df = csv_reader.fetch()
-    assert len(df.columns) == 4
-    assert (df.columns.values == ["0","1","2016-08-25 15:32:00","2016-08-25 15:33:00"]).all()
+    assert df.shape == (2, 5)
     for col in df.columns:
         assert is_float_dtype(df[col])
 
@@ -48,12 +123,6 @@ def test_improper_csv(tmp_path):
     csv_reader = CSVReader(str(d))
     with pytest.raises(ValueError):
         csv_reader.fetch()
-
-def test_is_datetime(tmp_path):
-    d = tmp_path / "dummy.csv"
-    csv_reader = CSVReader(str(d))
-    assert csv_reader._CSVReader__is_datetime("2001-01-01") == True
-    assert csv_reader._CSVReader__is_datetime("NotADate") == False
 
 @pytest.fixture
 def setup_csv_data(mocker):

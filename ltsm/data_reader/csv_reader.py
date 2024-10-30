@@ -3,6 +3,7 @@ import pandas as pd
 import logging
 from pathlib import Path
 from ltsm.common.base_reader import BaseReader
+from typing import Any
 
 logging.basicConfig(
     level=logging.INFO, 
@@ -114,52 +115,49 @@ class CSVReader(BaseReader):
 
         # Read data, extract columns, toss non-datetime columns
         try:
-            loaded_data = pd.read_csv(self.data_path)
+            loaded_data = pd.read_csv(self.data_path, header=None)
+            
+            # loaded_data = loaded_data.drop(index=0)
+            loaded_data.columns = loaded_data.iloc[0]
+            loaded_data = loaded_data[1:]
+            loaded_data.reset_index(drop=True, inplace=True)
+            # Transpose the data if each time-series sequence is saved in the columns
+            if loaded_data.shape[1] < loaded_data.shape[0]:
+                # Assuming if there are more rows than columns, then time-series sequence is saved in columns
+                if loaded_data.shape[1] > 1: 
+                    # Drop first column containing time-series indices
+                    loaded_data = loaded_data.drop(columns=[loaded_data.columns[0]])
+                loaded_data = loaded_data.T 
+                #loaded_data.columns = range(len(loaded_data.columns))
+            loaded_data.index.name = None
+            loaded_data.columns.name = None
+            loaded_data.columns = range(len(loaded_data.columns))
+            #loaded_data = loaded_data.reset_index(drop=True) # reset index to start from 0
         except pd.errors.EmptyDataError:
             raise ValueError(f"CSV file at {self.data_path} is empty.")
         except pd.errors.ParserError:
             raise ValueError(f"Failed to parse CSV file at {self.data_path}.")
-        
+        except Exception as e:
+            raise e
+
         for col in loaded_data.columns:
-            if type(col) == str and not col.isnumeric() and not self.__is_datetime(col):
-                # Drop columns that are either not labeled by a datetime or an index
-                logging.info(f"Dropping column '{col}' as its column name is neither a number nor a datetime.")
-                loaded_data.drop(columns=col, inplace=True)
-            elif not pd.api.types.is_float_dtype(loaded_data[col]):
+            if not pd.api.types.is_float_dtype(loaded_data[col]):
                 # Try to convert to numeric data type
                 try:
-                    loaded_data[col] = pd.to_numeric(loaded_data[col])
+                    loaded_data[col]= pd.to_numeric(loaded_data[col])
                 except Exception as e:
                     # Drop columns that do not contain float data
                     logging.info(f"Dropping column '{col}' as it does not contain float data.")
                     loaded_data.drop(columns=col, inplace=True)
-                
-
         
         # Fill NA through linear interpolation
         def fillna(row):
             if row.isna().any():
-                return row.interpolate(method='linear', inplace=False)
+                return row.interpolate(method='linear', limit_direction='both', inplace=False)
             return row
 
         loaded_data = loaded_data.apply(fillna, axis=1)
         return loaded_data
-    
-    def __is_datetime(self, label: str) -> bool:
-        """
-        Checks whether a column's label is in Pandas datetime format.
-        
-        Args:
-            label (str): The column label to check.
-
-        Returns:
-            bool: True if the column label is in datetime format, False otherwise.
-        """
-        try:
-            pd.to_datetime(label)
-            return True
-        except ValueError:
-            return False
         
 if __name__ == '__main__':
     input_folder = './datasets/DK/'
