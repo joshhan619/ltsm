@@ -1,21 +1,10 @@
-TRAIN="datasets/ETT-small/ETTh1.csv 
-    datasets/ETT-small/ETTh2.csv
-    datasets/ETT-small/ETTm1.csv
-    datasets/ETT-small/ETTm2.csv
-    datasets/electricity/electricity.csv
+TRAIN="
     datasets/exchange_rate/exchange_rate.csv
-    datasets/traffic/traffic.csv
-    datasets/weather/weather.csv"
+    datasets/illness/national_illness.csv"
 
-TEST="datasets/ETT-small/ETTh1.csv 
-    datasets/ETT-small/ETTh2.csv
-    datasets/ETT-small/ETTm1.csv
-    datasets/ETT-small/ETTm2.csv
-    datasets/electricity/electricity.csv
-    datasets/exchange_rate/exchange_rate.csv
-    datasets/traffic/traffic.csv
-    datasets/weather/weather.csv"
-PROMPT="prompt_bank/prompt_data_normalize_csv_split"
+TEST="datasets/exchange_rate/exchange_rate.csv
+    datasets/illness/national_illness.csv"
+PROMPT="prompt_bank/prompt_data_normalize_split"
 lr=1e-3
 epoch=50
 downsample_rate=20
@@ -25,7 +14,8 @@ OUTPUT_PATH="output/ltsm_tokenizer_lr${lr}_loraFalse_down${downsample_rate}_free
 
 for pred_len in 96
 do
-    CUDA_VISIBLE_DEVICES=0,1 python3 main_tokenizer.py \
+    OUTPUT_PATH="/home/zx57/ltsm/output_folder/ltsm_tokenizer_lr${lr}_loraFalse_down${downsample_rate}_freeze${freeze}_e${epoch}_pred${pred_len}/"
+    CUDA_VISIBLE_DEVICES=0,1 python3 ./tests/test_scripts/main_tokenizer.py \
     --model LTSM_Tokenizer \
     --model_name_or_path gpt2-medium \
     --d_ff $d_ff \
@@ -40,5 +30,5 @@ do
     --learning_rate ${lr} \
     --downsample_rate ${downsample_rate} \
     --output_dir ${OUTPUT_PATH}\
-    --eval 1
+    --eval 0
 done

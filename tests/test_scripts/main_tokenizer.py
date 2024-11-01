@@ -6,11 +6,12 @@ import argparse
 import random
 import sys
 
-sys.path.append("/home/yc146/github_open_ltsm/ltsm")
+sys.path.append("/home/zx57/ltsm") # path to the ltsm repo
 
-from ltsm.data_provider.data_factory import get_datasets,get_test_datasets
+from ltsm.data_provider.data_factory import get_datasets
+from ltsm.data_provider.data_factory import DatasetFactory
 from ltsm.data_provider.data_loader import HF_Dataset
-from ltsm.data_provider.data_processing.tokenizer_processor import TokenizerConfig
+from ltsm.data_provider.tokenizer.tokenizer_processor import TokenizerConfig
 from ltsm.models import get_model, LTSMConfig
 from peft import get_peft_model, LoraConfig
 
@@ -18,7 +19,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     EvalPrediction,
-    set_seed,
+    #set_seed,
 )
 def get_args():
     parser = argparse.ArgumentParser(description='LTSM')
@@ -109,6 +110,14 @@ def run(args):
     print(args)
     model_config = LTSMConfig(**vars(args))
     model = get_model(model_config)
+    # dataFactory = DatasetFactory(data_paths=args.data_path, 
+    #                              prompt_data_path=args.prompt_data_path,
+    #                              data_processing=args.data_processing,
+    #                              seq_len=args.seq_len,
+    #                              pred_len=args.pred_len,
+    #                              train_ratio=args.train_ratio,
+    #                              val_ratio=args.val_ratio,
+    #                              )
 
     if args.lora:
         peft_config = LoraConfig(
@@ -211,9 +220,9 @@ def run(args):
     )
 
     # Training settings
-    train_dataset, eval_dataset, _ = get_datasets(args)
+    train_dataset, eval_dataset, _, _ = get_datasets(args)
     train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
-
+    print("Start Training. Train dataset size:", len(train_dataset))
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -240,7 +249,7 @@ def run(args):
         trainer.compute_loss = compute_loss
         trainer.prediction_step = prediction_step
         args.test_data_path = data_path
-        test_dataset, _ = get_test_datasets(args)
+        _, _, test_dataset, _ = get_datasets(args)
         test_dataset = HF_Dataset(test_dataset)
 
         metrics = trainer.evaluate(test_dataset)
@@ -249,6 +258,8 @@ def run(args):
 
 
 if __name__ == "__main__":
+    print("Starting LTSM-TOkenizer...")
     args = get_args()
     seed_all(args.seed)
+    print("Args loaded, start running...")
     run(args)

@@ -9,18 +9,18 @@ import matplotlib.pyplot as plt
 import sys, os
 import torch
 
-def parse_list(arg):
-    """parse a string of comma-separated values into a list
-    e.g. python ./ltsm/prompt_reader/stat_prompt/prompt_generate_split.py --dataset_name ETT-small, illness
-    """
-    return arg.split(',')
+# def parse_list(arg):
+#     """parse a string of comma-separated values into a list
+#     e.g. python ./ltsm/prompt_reader/stat_prompt/prompt_generate_split.py --dataset_name ETT-small, illness
+#     """
+#     return arg.split(',')
 
 def get_args():
     parser = argparse.ArgumentParser(description='LTSM')
 
     parser.add_argument('--root_path', type=str, default='./datasets/', help='Root path for datasets')
     parser.add_argument('--output_path', type=str, default='./prompt_bank/stat-prompt/prompt_data_split/', help='Output path for prompt data')
-    parser.add_argument('--dataset_name', type=parse_list, default=[])
+    parser.add_argument('--dataset_name', nargs='+', default=[])
     parser.add_argument('--save_format', type=str, default='pth.tar',choices=["pth.tar", "csv", "npz"], help='The format to save the data')
     parser.add_argument('--test', type=bool, default=False)
 

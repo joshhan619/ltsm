@@ -10,13 +10,13 @@ import sys, os
 import torch
 from sklearn.preprocessing import StandardScaler
 
-def parse_list(arg):
-    return arg.split(',')
+# def parse_list(arg):
+#     return arg.split(',')
 
 def get_args():
     parser = argparse.ArgumentParser(description='LTSM')
     parser.add_argument('--mode', choices=["fit", "transform"], required=True)
-    parser.add_argument('--dataset_name', type=parse_list, default=[], help='The name of the dataset to be processed')
+    parser.add_argument('--dataset_name', nargs='+', default=[], help='The name of the dataset to be processed')
     parser.add_argument('--save_format', type=str, default='pth.tar', choices=["pth.tar", "csv", "npz"], help='The format to save the data')
     parser.add_argument('--root_path_train', type=str, default="./prompt_bank/stat-prompt/prompt_data_split/train", help='Root path for training data')
     parser.add_argument('--output_path_train', type=str, default="./prompt_bank/stat-prompt/prompt_data_normalize_split/train", help='Output path for normalized training data')
@@ -136,7 +136,7 @@ def standardscale_export(data_path_buf, params_fname, output_path, root_path, sa
     # ipdb.set_trace()
 
     for index, dataset_path in enumerate(data_path_buf):
-        prompt_data_raw = torch.load(dataset_path)
+        prompt_data_raw = load_data(dataset_path, save_format)
         prompt_data_raw = prompt_prune(prompt_data_raw)
 
         prompt_data = scaler.transform(prompt_data_raw.values.reshape(1, -1))
@@ -149,7 +149,7 @@ def standardscale_export(data_path_buf, params_fname, output_path, root_path, sa
         prompt_fname = dataset_path.replace(root_path, output_path)
         prompt_dir = prompt_fname[0:prompt_fname.rfind("/")]
         if not os.path.exists(prompt_dir):
-            os.mkdir(prompt_dir)
+            os.makedirs(prompt_dir)
         # prompt_data_tramsform: pd.DataFrame,(1,133), column is RandeIndex
         # torch.save(prompt_data_transform, prompt_fname) 
         save_data(prompt_data_transform, prompt_fname, save_format)
@@ -177,6 +177,8 @@ if __name__ == "__main__":
     root_path_test = args.root_path_test
     output_path_test = args.output_path_test
     dataset_root_path = args.dataset_root
+
+    print(dataset_name)
 
     if not dataset_name:
         dataset_name = [name for name in os.listdir(dataset_root_path) if os.path.isdir(os.path.join(dataset_root_path, name))]
