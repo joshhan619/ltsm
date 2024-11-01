@@ -3,7 +3,6 @@ import pandas as pd
 import logging
 from pathlib import Path
 from ltsm.common.base_reader import BaseReader
-import warnings
 
 logging.basicConfig(
     level=logging.INFO, 
@@ -122,14 +121,19 @@ class CSVReader(BaseReader):
             raise ValueError(f"Failed to parse CSV file at {self.data_path}.")
         
         for col in loaded_data.columns:
-            if not col.isnumeric() and not self.__is_datetime(col):
+            if type(col) == str and not col.isnumeric() and not self.__is_datetime(col):
                 # Drop columns that are either not labeled by a datetime or an index
-                warnings.warn(f"Dropping column '{col}' as its column name is neither a number nor a datetime.")
+                logging.info(f"Dropping column '{col}' as its column name is neither a number nor a datetime.")
                 loaded_data.drop(columns=col, inplace=True)
             elif not pd.api.types.is_float_dtype(loaded_data[col]):
-                # Drop columns that do not contain float data
-                warnings.warn(f"Dropping column '{col}' as it does not contain float data.")
-                loaded_data.drop(columns=col, inplace=True)
+                # Try to convert to numeric data type
+                try:
+                    loaded_data[col] = pd.to_numeric(loaded_data[col])
+                except Exception as e:
+                    # Drop columns that do not contain float data
+                    logging.info(f"Dropping column '{col}' as it does not contain float data.")
+                    loaded_data.drop(columns=col, inplace=True)
+                
 
         
         # Fill NA through linear interpolation
