@@ -16,10 +16,7 @@ def setup(tmp_path):
 
     d = tmp_path / "prompt_bank"
     d.mkdir()
-    d = d / "prompt_data_normalize_split"
-    d.mkdir()
-
-    prompt_data_path = d / "train"
+    prompt_data_path = d / "prompt_data_normalize_split"
     prompt_data_path.mkdir()
 
     prompt_data_folder = prompt_data_path / "mock"
@@ -85,7 +82,7 @@ def test_data_factory_load_prompts_invalid_chars(setup):
         assert train_prompt.shape == (1, 133)
         torch.save(train_prompt, str(p))
         
-    prompt_data = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
+    prompt_data, _ = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
     assert len(prompt_data) == 5
     for i in range(5):
         assert len(prompt_data[i]) == 133
@@ -98,10 +95,10 @@ def test_data_factory_load_prompts_invalid_prompt_file(setup):
         p = prompt_data_folder / f"mock_{index}_prompt.pth.tar"
         p.write_text("not valid .pth file content")
 
-    prompt_data = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
+    prompt_data, _ = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
     assert len(prompt_data) == 4
     for i in range(4):
-        assert prompt_data[i] is None
+        assert len(prompt_data[i]) == 0
 
 def test_data_factory_load_csv_prompts(setup):
     data_path, prompt_data_path, prompt_data_folder, datasetFactory = setup
@@ -122,7 +119,7 @@ def test_data_factory_load_csv_prompts(setup):
         assert train_prompt.shape == (1, 100)
         torch.save(train_prompt, str(p))
         
-    prompt_data = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
+    prompt_data, _ = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
     assert len(prompt_data) == 4
     prompt_data_buf = pd.DataFrame(np.array(prompt_data), index=buff)
     assert prompt_data_buf.equals(train_buf)
@@ -152,7 +149,7 @@ def test_data_factory_load_monash_prompts(setup):
         assert train_prompt.shape == (1, 100)
         torch.save(train_prompt, str(p))
         
-    prompt_data = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
+    prompt_data, _ = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
     assert len(prompt_data) == 4
     prompt_data_buf = pd.DataFrame(np.array(prompt_data), index=buff)
     assert prompt_data_buf.equals(train_buf)
@@ -164,11 +161,33 @@ def test_data_factory_load_word_prompts(setup):
     # Change model to 'LTSM_WordPrompt'
     datasetFactory.model = "LTSM_WordPrompt"
         
-    prompt_data = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
+    prompt_data, _ = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
     assert len(prompt_data) == 4
     for i in range(4):
         assert len(prompt_data[i]) == 1
         assert prompt_data[i][0] == 0
+
+def test_data_factory_load_missing_prompts(setup):
+    data_path, prompt_data_path, prompt_data_folder, datasetFactory = setup
+    buff = ['one', 'two', 'three']
+    prompt_indices = ['one', 'two']
+    # Mock data for mock pth file
+    train_buf = pd.DataFrame(pd.DataFrame(np.zeros((5, 133)), columns=[i for i in range(133)]))
+
+    for i, filename in enumerate(prompt_indices):
+        p = prompt_data_folder / f"mock_{filename}_prompt.pth.tar"
+        train_prompt = pd.DataFrame(train_buf.iloc[i].values)
+        train_prompt = train_prompt.T
+        assert train_prompt.shape == (1, 133)
+        torch.save(train_prompt, str(p))
+
+    prompt_data, missing = datasetFactory.loadPrompts(str(data_path), str(prompt_data_path), buff)
+    assert len(missing) == 1
+    assert missing[0] == 'three'
+    assert len(prompt_data) == 3
+    assert len(prompt_data[0]) == 133
+    assert len(prompt_data[1]) == 133
+    assert len(prompt_data[2]) == 0
     
 
 def test_data_factory_createTorchDS_empty(setup):
@@ -223,7 +242,7 @@ def test_data_factory_getDatasets(mocker, setup):
     mocker.patch.object(datasetFactory, 'fetch', return_value=mock_df)
     mocker.patch.object(datasetFactory.splitter, 'get_csv_splits', return_value=([],[],[],[]))
     mocker.patch.object(datasetFactory.processor, 'process', return_value=([mock_ndarray], [mock_ndarray], [mock_ndarray]))
-    mocker.patch.object(datasetFactory, 'loadPrompts', return_value=[])
+    mocker.patch.object(datasetFactory, 'loadPrompts', return_value=([], []))
     mocker.patch.object(datasetFactory, 'createTorchDS', return_value=mock_torch_ds)
 
     train_dataset, val_dataset, test_datasets = datasetFactory.getDatasets()
@@ -253,6 +272,7 @@ def test_data_factory_getDatasets_testset_no_split(mocker, setup):
         str(data_path.parent / "fake3.csv"),
         str(data_path.parent / "fake4.csv")
     ]
+
     # Set split_test_sets to False
     datasetFactory.split_test_sets = False
     
@@ -262,7 +282,7 @@ def test_data_factory_getDatasets_testset_no_split(mocker, setup):
     mocker.patch.object(datasetFactory, 'fetch', return_value=mock_df)
     mocker.patch.object(datasetFactory.splitter, 'get_csv_splits', return_value=([],[],[],[]))
     mocker.patch.object(datasetFactory.processor, 'process', return_value=([mock_ndarray], [mock_ndarray], [mock_ndarray]))
-    mocker.patch.object(datasetFactory, 'loadPrompts', return_value=[])
+    mocker.patch.object(datasetFactory, 'loadPrompts', return_value=([], []))
     mocker.patch.object(datasetFactory, 'createTorchDS', return_value=mock_torch_ds)
 
     train_dataset, val_dataset, test_datasets = datasetFactory.getDatasets()
@@ -279,3 +299,66 @@ def test_data_factory_getDatasets_testset_no_split(mocker, setup):
     assert datasetFactory.processor.process.call_count == 4
     assert datasetFactory.loadPrompts.call_count == 12
     assert datasetFactory.createTorchDS.call_count == 3
+
+def test_data_factory_getDatasets_missing_prompts(mocker, setup):
+    data_path, prompt_data_path, prompt_data_folder, datasetFactory = setup
+    datasetFactory.data_paths = [
+        str(data_path.parent / "fake1.csv")
+    ]
+
+    datasetFactory.downsample_rate = 1
+
+    # Only create prompt data files for two of the four indices
+    train_buf = pd.DataFrame(pd.DataFrame(np.zeros((2, 2)), columns=[i for i in range(2)]))
+    prompt_indices = [['one', 'three'], ['one', 'two'], ['one', 'four']]
+    for i, folder in enumerate(["train", "val", "test"]):
+        parent = prompt_data_path / folder
+        parent.mkdir()
+        parent = parent / "mock"
+        parent.mkdir()
+            
+        for j, filename in enumerate(prompt_indices[i]):
+            p = parent / f"fake1_{filename}_prompt.pth.tar"
+            train_prompt = pd.DataFrame(train_buf.iloc[j].values)
+            train_prompt = train_prompt.T
+            assert train_prompt.shape == (1, 2)
+            torch.save(train_prompt, str(p))
+
+    mock_array = [np.array([math.pi for i in range(11)]),
+        np.array([math.exp(i) for i in range(11)]),
+        np.array([2*i for i in range(11)]),
+        np.array([i**2 for i in range(1)])
+    ]
+    mock_df = pd.DataFrame([])
+    #mock_torch_ds = TSPromptDataset([], [], 0, 0)
+    mocker.patch.object(datasetFactory, 'fetch', return_value=mock_df)
+    mocker.patch.object(datasetFactory.splitter, 'get_csv_splits', return_value=([],[],[],['one', 'two', 'three', 'four']))
+    mocker.patch.object(datasetFactory.processor, 'process', return_value=(mock_array, mock_array, mock_array))
+    
+    #mocker.patch.object(datasetFactory, 'createTorchDS', return_value=mock_torch_ds)
+    train_dataset, val_dataset, test_datasets = datasetFactory.getDatasets()
+
+    torch.set_default_dtype(torch.float64)
+    truth_value_seq = torch.Tensor([math.pi if i > 1 else 0 for i in range(12)])
+    truth_value_seq = torch.reshape(truth_value_seq, (12, 1))
+    truth_value_pred = torch.Tensor([math.pi])
+    truth_value_pred = torch.reshape(truth_value_pred, (1, 1))
+
+    assert len(train_dataset) == 1
+    assert torch.equal(train_dataset[0][0], truth_value_seq)
+    assert torch.equal(train_dataset[0][1], truth_value_pred)
+
+    assert len(val_dataset) == 1
+    assert torch.equal(val_dataset[0][0], truth_value_seq)
+    assert torch.equal(val_dataset[0][1], truth_value_pred)
+
+    assert len(test_datasets) == 1
+    assert len(test_datasets[0]) == 1
+    assert torch.equal(test_datasets[0][0][0], truth_value_seq)
+    assert torch.equal(test_datasets[0][0][1], truth_value_pred)
+
+    expected_calls = [call(data_path) for data_path in datasetFactory.data_paths]
+    datasetFactory.fetch.assert_has_calls(expected_calls)
+
+    assert datasetFactory.splitter.get_csv_splits.call_count == 1
+    assert datasetFactory.processor.process.call_count == 1

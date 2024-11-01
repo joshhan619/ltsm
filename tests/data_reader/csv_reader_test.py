@@ -91,9 +91,9 @@ def test_csv_reader_NA(tmp_path, setup_csvreader_data, mocker):
         result_df = csv_reader.fetch()
         try:
             pd.testing.assert_frame_equal(result_df, expected_df,
-                                      check_dtype=False,)
+                                      check_dtype=False, check_index_type=False)
         except AssertionError as e:
-            raise AssertionError("Data transformation did not produce the expected output.") from e
+            raise AssertionError(f"Data transformation did not produce the expected output. Expected {expected_df}, instead got {result_df}") from e
 
 def test_csv_reader_columns(tmp_path):
     d = tmp_path / "col_names_test.csv"
@@ -123,6 +123,32 @@ def test_improper_csv(tmp_path):
     csv_reader = CSVReader(str(d))
     with pytest.raises(ValueError):
         csv_reader.fetch()
+
+def test_float_indices(tmp_path):
+    d = tmp_path / "float_indices.csv"
+    data_string = """date,0.0,1.0,2.0\n
+                    2014,0.25,0.50,0.75\n
+                    2015,0.25,0.50,0.75\n
+                    2016,0.25,0.50,0.75\n
+                    2017,0.25,0.50,0.75\n
+                    2018,0.25,0.50,0.75"""
+    d.write_text(data_string)
+    csv_reader = CSVReader(str(d))
+    df = csv_reader.fetch()
+
+    expected_df = pd.DataFrame({
+        0: [0.25, 0.50, 0.75],
+        1: [0.25, 0.50, 0.75],
+        2: [0.25, 0.50, 0.75],
+        3: [0.25, 0.50, 0.75],
+        4: [0.25, 0.50, 0.75]
+    }, index=[0, 1, 2])
+
+    try:
+        pd.testing.assert_frame_equal(df, expected_df,
+                                    check_dtype=False)
+    except AssertionError as e:
+        raise AssertionError(f"Data transformation did not produce the expected output. Expected {expected_df}, instead got {df}") from e
 
 @pytest.fixture
 def setup_csv_data(mocker):

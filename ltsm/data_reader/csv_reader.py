@@ -149,7 +149,22 @@ class CSVReader(BaseReader):
                     # Drop columns that do not contain float data
                     logging.info(f"Dropping column '{col}' as it does not contain float data.")
                     loaded_data.drop(columns=col, inplace=True)
-        
+
+        # Function to convert float-like strings to integer strings where possible
+        def convert_float_index(index):
+            try:
+                # Try to convert the index to a float and then to an integer if it's a whole number
+                float_val = float(index)
+                int_val = int(float_val)
+                # Check if the float and integer representations are equivalent
+                return int_val if float_val == int_val else index
+            except ValueError:
+                # If conversion fails, return the original index
+                return index
+
+        # Apply the function to each index
+        loaded_data.index = loaded_data.index.map(convert_float_index)
+
         # Fill NA through linear interpolation
         def fillna(row):
             if row.isna().any():
