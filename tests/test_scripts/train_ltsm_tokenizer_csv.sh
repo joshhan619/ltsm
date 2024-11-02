@@ -3,11 +3,12 @@ TRAIN="
     datasets/exchange_rate/exchange_rate.csv
     datasets/illness/national_illness.csv"
 
-TEST="datasets/exchange_rate/exchange_rate.csv
+TEST="
+    datasets/exchange_rate/exchange_rate.csv
     datasets/illness/national_illness.csv"
 PROMPT="prompt_bank/stat-prompt/prompt_data_normalize_split"
 lr=1e-3
-epoch=500
+epoch=50
 downsample_rate=20
 freeze=0
 d_ff=128 
@@ -34,4 +35,4 @@ do
 done
 ' > output.log 2>&1 &
 
-tail -f output.log
+#tail -f output.log # check the latest output
