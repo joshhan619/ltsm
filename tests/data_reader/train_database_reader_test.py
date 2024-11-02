@@ -20,23 +20,27 @@ class TestDatabaseOperations(unittest.TestCase):
         num_rows = 1000
         num_features = 10
         np.random.seed(42)
-        float_data = np.random.rand(num_rows, num_features) * 100  # Generate random float values between 0 and 100
+        float_data = np.random.rand(num_rows, num_features)  # Generate random float values between 0 and 1
         label_data = np.random.randint(0, 2, size=(num_rows, 1))  # Random integer values 0 or 1 for 'Label'
 
         # Combine float data and label column to create a full dataset
         data = np.hstack((float_data, label_data))
-        columns = [f'Feature{i+1}' for i in range(num_features)] + ['Label']
+        columns = [f'Feature{i + 1}' for i in range(num_features)] + ['Label']
 
         # Create a Pandas DataFrame from the generated data
         self.df = pd.DataFrame(data, columns=columns)
+
+        # Ensure 'Label' is an integer type
+        self.df['Label'] = self.df['Label'].astype(int)
+
         self.input_csv = StringIO(self.df.to_csv(index=False))
 
         # Sample expected table creation schema
         self.expected_schema = (
-            "CREATE TABLE IF NOT EXISTS test_table ("
-            "ts TIMESTAMP, " +
-            ", ".join([f"`Feature{i+1}` FLOAT" for i in range(num_features)]) +
-            ", `Label` INT)"
+                "CREATE TABLE IF NOT EXISTS test_table ("
+                "ts TIMESTAMP, " +
+                ", ".join([f"`Feature{i + 1}` FLOAT" for i in range(num_features)]) +
+                ", Label INT)"
         )
 
     @patch('taosws.connect')
@@ -72,7 +76,7 @@ class TestDatabaseOperations(unittest.TestCase):
         # Mock fetched data and column descriptions
         self.cursor.fetchall.side_effect = [
             [tuple(row) for row in self.df.values],  # Fetched data as tuples
-            [('ts',)] + [(f'Feature{i+1}',) for i in range(10)] + [('Label',)]  # Column names
+             [(f'Feature{i+1}',) for i in range(10)] + [('Label',)]  # Column names
         ]
 
         output_file = "test_output.csv"

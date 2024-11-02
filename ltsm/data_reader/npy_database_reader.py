@@ -9,7 +9,7 @@ output_folder = 'time_series_preds_download'
 database = "time_series_preds"
 user = "root"
 password = "taosdata"
-
+insert_batch_size = 100
 
 # create_connection() function to connect to the database. (change host and port to your own)
 def create_connection(host='35.153.211.255', port=6041):
@@ -44,6 +44,7 @@ def setup_tables(conn, database, table_name, df):
     try:
         cursor = conn.cursor()
         cursor.execute(f"USE {database}")
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
         columns = df.columns
         schema_columns = ["ts TIMESTAMP"]
         print(df)
@@ -52,6 +53,7 @@ def setup_tables(conn, database, table_name, df):
         for i in range(schema_extend_length):
             schema_columns.append(f"`{i}` FLOAT")
         schema = f"({', '.join(schema_columns)})"
+
         cursor.execute(f"CREATE TABLE IF NOT EXISTS {table_name} {schema}")
         print(f"Table {table_name} set up successfully with schema: {schema}")
     except Exception as err:
@@ -63,19 +65,20 @@ print(setup_tables.__code__.co_consts)
 
 
 # insert_data_from_npy() function to insert data from NPY files into tables.
-def insert_data_from_npy(conn, database, npy_file, table_name):
+def insert_data_from_npy(conn, database, npy_file, table_name, batch_size=insert_batch_size):
     try:
         cursor = conn.cursor()
         data = np.load(npy_file)
         df = pd.DataFrame(data)
-
+        print(f"input npy{table_name}:{df}")
+        # Create table if needed
         setup_tables(conn, database, table_name, df)
         cursor.execute(f"USE {database}")
 
         current_time = pd.Timestamp.now()  # Start with the current timestamp
+        rows = []
 
-        for _, row in df.iterrows():
-            # Format the current timestamp and ensure uniqueness by incrementing it for each row
+        for i, row in df.iterrows():
             values = [f"'{current_time.strftime('%Y-%m-%d %H:%M:%S')}'"]  # Current timestamp value
             current_time += timedelta(seconds=1)  # Increment timestamp by 1 second
 
@@ -90,8 +93,20 @@ def insert_data_from_npy(conn, database, npy_file, table_name):
                 else:
                     values.append(str(value))
 
-            insert_query = f"INSERT INTO {table_name} VALUES({', '.join(values)})"
-            print(f"Inserting data: {insert_query}")
+            # Append the formatted row to the batch
+            rows.append(f"({', '.join(values)})")
+
+            # If batch size is reached, execute the batch insert
+            if len(rows) >= batch_size:
+                insert_query = f"INSERT INTO {table_name} VALUES " + ", ".join(rows)
+                print(f"Inserting batch of {batch_size} rows")
+                cursor.execute(insert_query)
+                rows = []  # Reset the batch
+
+        # Insert remaining rows if any
+        if rows:
+            insert_query = f"INSERT INTO {table_name} VALUES " + ", ".join(rows)
+            print(f"Inserting final batch of {len(rows)} rows")
             cursor.execute(insert_query)
 
         print(f"Data from {npy_file} inserted into table {table_name} successfully.")
@@ -109,14 +124,13 @@ def retrieve_data_to_npy(conn, database, table_name, output_file):
         cursor.execute(f"SELECT * FROM {table_name}")
         data = cursor.fetchall()
         cursor.execute(f"DESCRIBE {table_name}")
-        columns = [desc[0] for desc in cursor.fetchall()]
 
-        df = pd.DataFrame(data, columns=columns)
+        df = pd.DataFrame(data)
+        print(f"retrieving table{table_name}:{df}")
         if 'ts' in df.columns:
             df.drop(columns=['ts'], inplace=True)
         data_array = df.to_numpy()
         np.save(output_file, data_array)
-        df.to_npy(output_file, index=False)
         print(f"Data from {table_name} saved to {output_file}.")
     except Exception as err:
         print(f"Error retrieving data from {table_name}: {err}")

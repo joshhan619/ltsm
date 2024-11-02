@@ -43,6 +43,7 @@ def setup_tables(conn, database, table_name, df):
     try:
         cursor = conn.cursor()
         cursor.execute(f"USE {database}")
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
         columns = df.columns
         schema_columns = ["ts TIMESTAMP"]
 
@@ -116,12 +117,22 @@ def retrieve_data_to_csv(conn, database, table_name, output_file):
         cursor.execute(f"USE {database}")
         cursor.execute(f"SELECT * FROM {table_name}")
         data = cursor.fetchall()
+
+        # Get column names and remove 'ts'
         cursor.execute(f"DESCRIBE {table_name}")
         columns = [desc[0] for desc in cursor.fetchall()]
 
+        # Remove 'ts' from columns list if it exists
+        if 'ts' in columns:
+            ts_index = columns.index('ts')
+            columns.remove('ts')
+
+            # Remove the 'ts' column from each row in data
+            data = [tuple(item for i, item in enumerate(row) if i != ts_index) for row in data]
+
+        # Create the DataFrame with columns excluding 'ts'
         df = pd.DataFrame(data, columns=columns)
-        if 'ts' in df.columns:
-            df.drop(columns=['ts'], inplace=True)
+
         df.to_csv(output_file, index=False)
         print(f"Data from {table_name} saved to {output_file}.")
     except Exception as err:
