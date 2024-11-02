@@ -1,21 +1,21 @@
+nohup bash -c '
 TRAIN="
     datasets/exchange_rate/exchange_rate.csv
     datasets/illness/national_illness.csv"
 
 TEST="datasets/exchange_rate/exchange_rate.csv
     datasets/illness/national_illness.csv"
-PROMPT="prompt_bank/prompt_data_normalize_split"
+PROMPT="prompt_bank/stat-prompt/prompt_data_normalize_split"
 lr=1e-3
-epoch=50
+epoch=500
 downsample_rate=20
 freeze=0
 d_ff=128 
-OUTPUT_PATH="output/ltsm_tokenizer_lr${lr}_loraFalse_down${downsample_rate}_freeze${freeze}_e${epoch}_pred${pred_len}/"
 
 for pred_len in 96
 do
-    OUTPUT_PATH="/home/zx57/ltsm/output_folder/ltsm_tokenizer_lr${lr}_loraFalse_down${downsample_rate}_freeze${freeze}_e${epoch}_pred${pred_len}/"
-    CUDA_VISIBLE_DEVICES=0,1 python3 ./tests/test_scripts/main_tokenizer.py \
+    OUTPUT_PATH="/home/zx57/ltsm/output/ltsm_tokenizer_lr${lr}_loraFalse_down${downsample_rate}_freeze${freeze}_e${epoch}_pred${pred_len}/"
+    CUDA_VISIBLE_DEVICES=5,6,7 python3 ./tests/test_scripts/main_tokenizer.py \
     --model LTSM_Tokenizer \
     --model_name_or_path gpt2-medium \
     --d_ff $d_ff \
@@ -32,3 +32,6 @@ do
     --output_dir ${OUTPUT_PATH}\
     --eval 0
 done
+' > output.log 2>&1 &
+
+tail -f output.log

@@ -10,6 +10,7 @@ sys.path.append("/home/zx57/ltsm") # path to the ltsm repo
 
 from ltsm.data_provider.data_factory import get_datasets
 from ltsm.data_provider.data_factory import DatasetFactory
+from ltsm.data_reader.csv_reader import transform_csv_dataset
 from ltsm.data_provider.data_loader import HF_Dataset
 from ltsm.data_provider.tokenizer.tokenizer_processor import TokenizerConfig
 from ltsm.models import get_model, LTSMConfig
@@ -110,14 +111,6 @@ def run(args):
     print(args)
     model_config = LTSMConfig(**vars(args))
     model = get_model(model_config)
-    # dataFactory = DatasetFactory(data_paths=args.data_path, 
-    #                              prompt_data_path=args.prompt_data_path,
-    #                              data_processing=args.data_processing,
-    #                              seq_len=args.seq_len,
-    #                              pred_len=args.pred_len,
-    #                              train_ratio=args.train_ratio,
-    #                              val_ratio=args.val_ratio,
-    #                              )
 
     if args.lora:
         peft_config = LoraConfig(
@@ -220,7 +213,16 @@ def run(args):
     )
 
     # Training settings
-    train_dataset, eval_dataset, _, _ = get_datasets(args)
+    new_data_paths = []
+    for data_path in args.data_path:
+        new_path = data_path.split("/")
+        new_path[-3] += "_transformed"
+        new_path = "/".join(new_path)
+        new_data_paths.append(new_path)
+        print(os.path.dirname(data_path), os.path.dirname(new_path))
+        transform_csv_dataset(os.path.dirname(data_path), os.path.dirname(new_path))
+    args.data_path = new_data_paths
+    train_dataset, eval_dataset, test_datasets, _ = get_datasets(args)
     train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
     print("Start Training. Train dataset size:", len(train_dataset))
     trainer = Trainer(
@@ -245,11 +247,12 @@ def run(args):
         trainer.save_state()
 
     # Testing settings
-    for data_path in args.test_data_path_list:
+    #for data_path in args.test_data_path_list:
+    for test_dataset in test_datasets:
         trainer.compute_loss = compute_loss
         trainer.prediction_step = prediction_step
-        args.test_data_path = data_path
-        _, _, test_dataset, _ = get_datasets(args)
+        # args.test_data_path = data_path
+        # _, _, test_dataset, _ = get_datasets(args)
         test_dataset = HF_Dataset(test_dataset)
 
         metrics = trainer.evaluate(test_dataset)
