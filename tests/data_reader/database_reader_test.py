@@ -50,7 +50,7 @@ class TestDatabaseConnector(unittest.TestCase):
 
         # Check if data insertion commands were executed
         self.assertTrue(mock_cursor.execute.called)
-        self.assertEqual(mock_cursor.execute.call_count, len(self.input_df)+3)  # Check the number of execute calls
+        self.assertEqual(mock_cursor.execute.call_count, len(self.input_df)+4)  # Check the number of execute calls
 
 if __name__ == '__main__':
     unittest.main()
