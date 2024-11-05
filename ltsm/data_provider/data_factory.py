@@ -8,7 +8,7 @@ from ltsm.data_provider.data_splitter import SplitterByTimestamp
 from ltsm.data_provider.tokenizer import processor_dict
 from ltsm.data_provider.dataset import TSDataset,  TSPromptDataset, TSTokenDataset
 
-from typing import Tuple, List, Any
+from typing import Tuple, List, Union, Dict
 import logging
 
 logging.basicConfig(
@@ -120,41 +120,52 @@ class DatasetFactory:
             prompt_name = data_name.split('/')[-2]+'/'+data_name.split('/')[-1].split('.')[0]
             prompt_path = os.path.join(prompt_data_path,prompt_name+'_'+str(idx_file_name)+"_prompt")
         
-        # Check for the existence of the prompt file in different formats
-        if os.path.exists(prompt_path + '.csv'):
-            prompt_path += '.csv'
-            print(f"Prompt file {prompt_path} exists")
-            prompt_data = pd.read_csv(prompt_path)
-            prompt_data.columns = prompt_data.columns.astype(int)
-        elif os.path.exists(prompt_path + '.pth.tar'):
-            prompt_path += '.pth.tar'
-            prompt_data = torch.load(prompt_path)  
-        elif os.path.exists(prompt_path + '.npz'):
-            prompt_path += '.npz'
-            loaded_data = np.load(prompt_path)
-            prompt_data = pd.DataFrame(loaded_data['data']) # this should match the key saved in prompt_generate_split.py
-        else:
-            logging.error(f"Prompt file {prompt_path} does not exist in any supported format")
-            return
-        # after load the data, it should be (1, 133). 133 is decided in prompt_generate_split.py
-        prompt_data = prompt_data.T[0]  # should be (133,)
-        prompt_data = [ prompt_data.iloc[i] for i in range(len(prompt_data)) ]
+        if not os.path.exists(prompt_path):
+            logging.error(f"Prompt file {prompt_path} does not exist")
+            return []
+
+        try:
+            # Check for the existence of the prompt file in different formats
+            if os.path.exists(prompt_path + '.csv'):
+                prompt_path += '.csv'
+                print(f"Prompt file {prompt_path} exists")
+                prompt_data = pd.read_csv(prompt_path)
+                prompt_data.columns = prompt_data.columns.astype(int)
+            elif os.path.exists(prompt_path + '.pth.tar'):
+                prompt_path += '.pth.tar'
+                prompt_data = torch.load(prompt_path)  
+            elif os.path.exists(prompt_path + '.npz'):
+                prompt_path += '.npz'
+                loaded_data = np.load(prompt_path)
+                prompt_data = pd.DataFrame(loaded_data['data']) # this should match the key saved in prompt_generate_split.py
+            else:
+                logging.error(f"Prompt file {prompt_path} does not exist in any supported format")
+                return []
+            # after load the data, it should be (1, 133). 133 is decided in prompt_generate_split.py
+            prompt_data = prompt_data.T[0]  # should be (133,)
+            prompt_data = [ prompt_data.iloc[i] for i in range(len(prompt_data)) ]
+        except Exception as e:
+            logging.error(e)
+            return []
+        
         return prompt_data
 
     
-    def loadPrompts(self, data_path: str, prompt_data_path:str, buff: List[Any])->List[List[np.float64]]:
+    def loadPrompts(self, data_path: str, prompt_data_path:str, buff: List[Union[int, str]])->Tuple[Dict[Union[int, str], List[np.float64]], List[Union[int, str]]]:
         """
         Loads the prompt data from prompt_data_path.
 
         Args:
             data_path (str): The file path to the source data.
             prompt_data_path (str): The file path to the directory where the prompt data files are stored.
-            buff (List[Any]): The list of row labels of the data.
+            buff (List[Union[int, str]]): The list of row labels of the data.
 
         Returns:
-            List[List[np.float64]]: A list of prompt data for each sequence.
+            Dict[Union[int, str], List[np.float64]]: A dictionary of data indices and the prompt data corresponding to each index.
+            List[Union[int, str]]: A list of indices with missing prompt data
         """
         prompt_data = []
+        missing = []
         if "WordPrompt" in self.model:
             # Load index of every data class for each instance, as prompt data will be different for different datasets
             for _ in buff:
@@ -166,8 +177,14 @@ class DatasetFactory:
                     data_path,
                     str(instance_idx)
                 )
+                # If no prompt is loaded for this instance, save instance_idx to missing list
+                if len(instance_prompt) == 0:
+                    missing.append(instance_idx)
+                    logging.info(f"Prompt data for index {instance_idx} of data path {data_path} cannot be read. Skipping this row.")
+
                 prompt_data.append(instance_prompt)
-        return prompt_data
+
+        return prompt_data, missing
     
     def createTorchDS(self, data: List[np.ndarray], prompt_data: List[List[np.float64]], downsample_rate: int)->TSDataset:
         """
@@ -232,21 +249,41 @@ class DatasetFactory:
                 fit_train_only=self.scale_on_train
             )
             logging.info(f"Data {data_path} has been split into train, val, test sets with the following shapes: {sub_train_data[0].shape}, {sub_val_data[0].shape}, {sub_test_data[0].shape}")
-            train_data.extend(sub_train_data)
-            val_data.extend(sub_val_data)
 
             # Step 2.5: Load prompt for each instance
+            missing = set()
             # Train Prompt
             train_prompt_data_path = self.prompt_data_path + '/train'
-            train_prompt_data.extend(self.loadPrompts(data_path, train_prompt_data_path, buff))
+            train_prompts, tmp = self.loadPrompts(data_path, train_prompt_data_path, buff)
+            missing.update(set(tmp))
+            
             
             # Validation Prompt
             val_prompt_data_path = self.prompt_data_path + '/val'
-            val_prompt_data.extend(self.loadPrompts(data_path, val_prompt_data_path, buff))
+            val_prompts, tmp = self.loadPrompts(data_path, val_prompt_data_path, buff)
+            missing.update(set(tmp))
+            
 
             # Test Prompt
             test_prompt_data_path = self.prompt_data_path + '/test'
-            sub_test_prompt_data = self.loadPrompts(data_path, test_prompt_data_path, buff)
+            sub_test_prompt_data, tmp = self.loadPrompts(data_path, test_prompt_data_path, buff)
+            missing.update(set(tmp))
+
+            # Remove rows from data that have missing prompt data
+            sub_train_data = [data for data, instance_idx in zip(sub_train_data, buff) if instance_idx not in missing]
+            sub_val_data = [data for data, instance_idx in zip(sub_val_data, buff) if instance_idx not in missing]
+            sub_test_data = [data for data, instance_idx in zip(sub_test_data, buff) if instance_idx not in missing]
+
+            # Only maintain instances that are able to load prompt data for training, validation, and testing
+            train_prompts = [data for data, instance_idx in zip(train_prompts, buff) if instance_idx not in missing]
+            val_prompts = [data for data, instance_idx in zip(val_prompts, buff) if instance_idx not in missing]
+            sub_test_prompt_data = [data for data, instance_idx in zip(sub_test_prompt_data, buff) if instance_idx not in missing]
+
+            train_prompt_data.extend(train_prompts)
+            val_prompt_data.extend(val_prompts)
+            
+            train_data.extend(sub_train_data)
+            val_data.extend(sub_val_data)
 
             if self.split_test_sets:
                 # Create a Torch dataset for each sub test dataset
@@ -298,7 +335,6 @@ def get_data_loaders(args):
     )
     train_dataset, val_dataset, test_datasets = dataset_factory.getDatasets()
     print(f"Data loaded, train size {len(train_dataset)}, val size {len(val_dataset)}")
-
 
     train_loader = DataLoader(
         train_dataset,
