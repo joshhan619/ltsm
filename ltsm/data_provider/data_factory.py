@@ -119,10 +119,6 @@ class DatasetFactory:
             # CSV and other
             prompt_name = data_name.split('/')[-2]+'/'+data_name.split('/')[-1].split('.')[0]
             prompt_path = os.path.join(prompt_data_path,prompt_name+'_'+str(idx_file_name)+"_prompt")
-        
-        if not os.path.exists(prompt_path):
-            logging.error(f"Prompt file {prompt_path} does not exist")
-            return []
 
         try:
             # Check for the existence of the prompt file in different formats
