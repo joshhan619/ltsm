@@ -70,7 +70,7 @@ def insert_data_from_npy(conn, database, npy_file, table_name, batch_size=insert
         cursor = conn.cursor()
         data = np.load(npy_file)
         df = pd.DataFrame(data)
-        print(f"input npy{table_name}:{df}")
+        print(f"input npy {table_name}:{df}")
         # Create table if needed
         setup_tables(conn, database, table_name, df)
         cursor.execute(f"USE {database}")
@@ -126,12 +126,12 @@ def retrieve_data_to_npy(conn, database, table_name, output_file):
         cursor.execute(f"DESCRIBE {table_name}")
 
         df = pd.DataFrame(data)
-        print(f"retrieving table{table_name}:{df}")
-        if 'ts' in df.columns:
-            df.drop(columns=['ts'], inplace=True)
+        if 0 in df.columns and pd.api.types.is_datetime64_any_dtype(df[0]):
+            df.drop(columns=[0], inplace=True)
         data_array = df.to_numpy()
         np.save(output_file, data_array)
         print(f"Data from {table_name} saved to {output_file}.")
+        print(f"{table_name}:{df}")
     except Exception as err:
         print(f"Error retrieving data from {table_name}: {err}")
         raise err

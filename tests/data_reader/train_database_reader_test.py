@@ -16,7 +16,7 @@ class TestDatabaseOperations(unittest.TestCase):
         self.cursor = MagicMock()
         self.conn.cursor.return_value = self.cursor
 
-        # Generate a larger, complex CSV input data (1000 rows, 10 float columns, 1 int column as Label)
+        #  A larger, complex CSV input data (1000 rows, 10 float columns, 1 int column as Label)
         num_rows = 1000
         num_features = 10
         np.random.seed(42)

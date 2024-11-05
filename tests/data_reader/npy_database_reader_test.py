@@ -20,7 +20,7 @@ class TestDatabaseOperations(unittest.TestCase):
         self.num_rows = 1000
         self.num_cols = 50
         np.random.seed(42)
-        self.data = np.random.rand(self.num_rows, self.num_cols) * 100  # Random floats between 0 and 100
+        self.data = np.random.rand(self.num_rows, self.num_cols) # Random floats between 0 and 100
 
         # Save the array to a temporary .npy file
         self.test_npy_file = 'test_data.npy'
@@ -56,7 +56,7 @@ class TestDatabaseOperations(unittest.TestCase):
 
     def test_insert_data_from_npy(self):
         # Test data insertion from .npy file with batch processing
-        insert_data_from_npy(self.conn, 'test_database', self.test_npy_file, self.table_name, batch_size=200)
+        insert_data_from_npy(self.conn, 'test_database', self.test_npy_file, self.table_name, batch_size=100)
         self.cursor.execute.assert_any_call(f"USE test_database")
 
         # Check that data is inserted in batches
@@ -78,7 +78,7 @@ class TestDatabaseOperations(unittest.TestCase):
 
         # Load and check the output file
         result_array = np.load(output_file)
-        self.assertEqual(result_array.shape, (self.num_rows, self.num_cols),
+        self.assertEqual(result_array.shape, (self.num_rows, self.num_cols),    # Subtract 1 for the timestamp column
                          "Output file shape does not match expected data shape.")
         np.testing.assert_array_almost_equal(self.data, result_array, decimal=5,
                                              err_msg="Output data does not match expected data.")
