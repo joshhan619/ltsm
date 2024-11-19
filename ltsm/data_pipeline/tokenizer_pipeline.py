@@ -1,12 +1,20 @@
+"""Pipeline for tokenizer-ltsm.
+   Task: Time Series Forecasting.
+"""
+
 import numpy as np
 import torch
 import argparse
 import random
 import ipdb
+from torch import nn
 
 from ltsm.data_provider.data_factory import get_datasets
 from ltsm.data_provider.data_loader import HF_Dataset
 from ltsm.data_pipeline.model_manager import ModelManager
+from ltsm.data_provider.tokenizer.tokenizer_processor import TokenizerConfig
+from ltsm.models import get_model, LTSMConfig
+from peft import get_peft_model, LoraConfig
 
 import logging
 from transformers import (
@@ -19,7 +27,102 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
 )
 
-class TrainingPipeline():
+class TokenizerModelManager(ModelManager):
+   def __init__(self, args: argparse.Namespace):
+         """
+         Initializes the ModelManager with provided arguments and default values for model, optimizer, and scheduler.
+   
+         Args:
+               args (argparse.Namespace): Training configurations and hyperparameters.
+         """
+         super().__init__(args)
+         self.tokenizer = None
+   def create_tokenizer(self):
+      context_length = self.args.seq_len+self.args.pred_len
+      prediction_length = self.args.pred_len
+      n_tokens = 1024
+      n_special_tokens = 2
+      config = TokenizerConfig(
+         tokenizer_class="MeanScaleUniformBins",
+         tokenizer_kwargs=dict(low_limit=-3.0, high_limit=3.0),
+         n_tokens=n_tokens,
+         n_special_tokens=n_special_tokens,
+         pad_token_id=0,
+         eos_token_id=1,
+         use_eos_token=0,
+         model_type="causal",
+         context_length=context_length,
+         prediction_length=prediction_length,
+         num_samples=20,
+         temperature=1.0,
+         top_k=50,
+         top_p=1.0,
+      )
+
+      self.tokenizer = config.create_tokenizer()
+   def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        Computes the loss for model training.
+
+        Args:
+            model (torch.nn.Module): The model used for predictions.
+            inputs (dict): Input data and labels.
+            return_outputs (bool): If True, returns both loss and model outputs.
+
+        Returns:
+            torch.Tensor or tuple: The computed loss, and optionally the outputs.
+        """
+        outputs = model(inputs["input_data"])
+        B, L, M, _ = outputs.shape
+        loss = nn.functional.cross_entropy(outputs.reshape(B*L,-1), inputs["labels"][:,1:].long().reshape(B*L))
+        return (loss, outputs) if return_outputs else loss
+   
+   @torch.no_grad()
+   def prediction_step(self, model, inputs, prediction_loss_only=False, ignore_keys=None):
+        input_data = inputs["input_data"].to(model.module.device)
+        labels = inputs["labels"].to(model.module.device)
+        scale = labels[:,0]
+        labels = labels[:,1:]
+        outputs = model(input_data)
+        indices = torch.max(outputs, dim=-1).indices
+
+        output_value = self.tokenizer.output_transform(indices, scale)
+        label_value = self.tokenizer.output_transform(labels.unsqueeze(-1).long(), scale)
+        loss = nn.functional.mse_loss(output_value, label_value)
+        return (loss, output_value, label_value)
+   
+   def create_model(self):
+      """
+        Initializes and configures the model based on specified arguments, including options for
+        freezing parameters or applying LoRA (Low-Rank Adaptation).
+
+        Returns:
+            torch.nn.Module: The configured model ready for training.
+        """
+      model_config = LTSMConfig(**vars(self.args))
+      self.model = get_model(model_config)
+
+      if self.args.lora:
+         peft_config = LoraConfig(
+                target_modules=["c_attn"],
+                inference_mode=False,
+                r=self.args.lora_dim,
+                lora_alpha=32,
+                lora_dropout=0.1
+            )
+         self.model = get_peft_model(self.model, peft_config)
+         self.model.print_trainable_parameters()
+        
+      elif self.args.freeze:
+         self.freeze_parameters()
+
+      self.print_trainable_parameters()
+      self.create_tokenizer()
+
+        # Optimizer settings
+      return self.model
+
+class TokenizerTrainingPipeline():
     """
     A pipeline for managing the training and evaluation process of a machine learning model.
 
@@ -36,7 +139,7 @@ class TrainingPipeline():
                                        learning rate, and other hyperparameters.
         """
         self.args = args
-        self.model_manager = ModelManager(args)
+        self.model_manager = TokenizerModelManager(args)
 
     def run(self):
         """
@@ -107,7 +210,7 @@ class TrainingPipeline():
             trainer.log_metrics("Test", metrics)
             trainer.save_metrics("Test", metrics)
 
-def get_args():
+def tokenizer_get_args():
     parser = argparse.ArgumentParser(description='LTSM')
 
     # Basic Config
@@ -167,8 +270,7 @@ def get_args():
 
     return args
 
-
-def seed_all(fixed_seed):
+def tokenizer_seed_all(fixed_seed):
     random.seed(fixed_seed)
     torch.manual_seed(fixed_seed)
     np.random.seed(fixed_seed)

@@ -1,6 +1,5 @@
 data_name="
-        exchange_rate 
-        illness"
+        multi-Synthetic"
 save_format="pth.tar"
 
 

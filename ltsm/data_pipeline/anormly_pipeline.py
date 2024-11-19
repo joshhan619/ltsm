@@ -1,8 +1,17 @@
+"""Pipeline for Anormly Data Detection
+    Main Difference from the LTSM : 
+        - pred_len == seq_len
+        - label is the anomaly label of input seq_len
+        - loss is CE/BCE
+
+"""
+
 import numpy as np
 import torch
 import argparse
 import random
 import ipdb
+from torch import nn
 
 from ltsm.data_provider.data_factory import get_datasets
 from ltsm.data_provider.data_loader import HF_Dataset
@@ -19,7 +28,28 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
 )
 
-class TrainingPipeline():
+class AnomalyModelManager(ModelManager):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        Computes the loss for model training.
+
+        Args:
+            model (torch.nn.Module): The model used for predictions.
+            inputs (dict): Input data and labels.
+            return_outputs (bool): If True, returns both loss and model outputs.
+
+        Returns:
+            torch.Tensor or tuple: The computed loss, and optionally the outputs.
+        """
+        outputs = model(inputs["input_data"]) # output should be B, L, M
+        labels = inputs["labels"]
+        #print(outputs.shape, labels.shape)
+        #B, L, M, _ = outputs.shape
+        loss = nn.functional.cross_entropy(outputs, labels)
+        #loss = nn.functional.cross_entropy(outputs.reshape(B*L,-1), inputs["labels"][:,1:].long().reshape(B*L))
+        return (loss, outputs) if return_outputs else loss
+
+class AnomalyTrainingPipeline():
     """
     A pipeline for managing the training and evaluation process of a machine learning model.
 
@@ -36,7 +66,7 @@ class TrainingPipeline():
                                        learning rate, and other hyperparameters.
         """
         self.args = args
-        self.model_manager = ModelManager(args)
+        self.model_manager = AnomalyModelManager(args)
 
     def run(self):
         """
@@ -107,7 +137,7 @@ class TrainingPipeline():
             trainer.log_metrics("Test", metrics)
             trainer.save_metrics("Test", metrics)
 
-def get_args():
+def anomaly_get_args():
     parser = argparse.ArgumentParser(description='LTSM')
 
     # Basic Config
@@ -124,11 +154,11 @@ def get_args():
     parser.add_argument('--data_processing', type=str, default="standard_scaler", help='data processing method')
     parser.add_argument('--train_ratio', type=float, default=0.7, help='train data ratio')
     parser.add_argument('--val_ratio', type=float, default=0.1, help='validation data ratio')
-    parser.add_argument('--do_anomaly', type=bool, default=False, help='do anomaly detection')
+    parser.add_argument('--do_anomaly', type=bool, default=True, help='do anomaly detection')
 
     # Forecasting Settings
-    parser.add_argument('--seq_len', type=int, default=336, help='input sequence length')
-    parser.add_argument('--pred_len', type=int, default=96, help='prediction sequence length')
+    parser.add_argument('--seq_len', type=int, default=113, help='input sequence length')
+    parser.add_argument('--pred_len', type=int, default=None, help='prediction sequence length')
     parser.add_argument('--prompt_len', type=int, default=133, help='prompt sequence length')
 
     # Model Settings
@@ -165,10 +195,14 @@ def get_args():
     parser.add_argument('--gradient_accumulation_steps', type=int, default=64, help='gradient accumulation steps')
     args, unknown = parser.parse_known_args()
 
+    if args.pred_len is None:
+        logging.info(f"Anomaly Mode, Set pred_len to seq_len")
+        args.pred_len = args.seq_len
+
     return args
 
 
-def seed_all(fixed_seed):
+def anomaly_seed_all(fixed_seed):
     random.seed(fixed_seed)
     torch.manual_seed(fixed_seed)
     np.random.seed(fixed_seed)

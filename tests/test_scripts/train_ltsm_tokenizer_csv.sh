@@ -6,9 +6,9 @@ TRAIN="
 TEST="
     datasets/exchange_rate/exchange_rate.csv
     datasets/illness/national_illness.csv"
-PROMPT="prompt_bank/stat-prompt/prompt_data_normalize_split"
+PROMPT="prompt_bank/prompt_data_normalize_split"
 lr=1e-3
-epoch=50
+epoch=10
 downsample_rate=20
 freeze=0
 d_ff=128 

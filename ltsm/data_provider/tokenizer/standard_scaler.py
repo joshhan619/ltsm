@@ -19,7 +19,7 @@ class StandardScaler(BaseProcessor):
     def __init__(self):
         self._scaler = None
 
-    def process(self, raw_data: np.ndarray, train_data: List[np.ndarray], val_data: List[np.ndarray], test_data: List[np.ndarray], fit_train_only:bool=False)->Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    def process(self, raw_data: np.ndarray, train_data: List[np.ndarray], val_data: List[np.ndarray], test_data: List[np.ndarray], fit_train_only:bool=False, do_anomaly:bool=False)->Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
         """
         Standardizes the training, validation, and test sets by removing the mean and scaling to unit variance.
 
@@ -35,12 +35,18 @@ class StandardScaler(BaseProcessor):
                 A tuple of three lists containing the processed training, validation, and test data. 
         """
         scaled_train_data, scaled_val_data, scaled_test_data = [], [], []
-        for raw_sequence, train_sequence, val_sequence, test_sequence in zip(
+        for i, (raw_sequence, train_sequence, val_sequence, test_sequence) in enumerate(zip(
             raw_data,
             train_data,
             val_data,
             test_data,
-        ):
+        )):
+            if do_anomaly and i == len(raw_data) - 1: # Skip anomaly label
+                scaled_train_data.append(train_sequence)
+                scaled_val_data.append(val_sequence)
+                scaled_test_data.append(test_sequence)
+                continue
+
             train_sequence = train_sequence.reshape(-1, 1)
             val_sequence = val_sequence.reshape(-1, 1)
             test_sequence = test_sequence.reshape(-1, 1)
