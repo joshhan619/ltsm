@@ -1,23 +1,23 @@
-TRAIN="datasets/ETT-small/ETTh1.csv 
-    datasets/ETT-small/ETTh2.csv
-    datasets/ETT-small/ETTm1.csv
-    datasets/ETT-small/ETTm2.csv
-    datasets/electricity/electricity.csv
-    datasets/exchange_rate/exchange_rate.csv
-    datasets/traffic/traffic.csv
-    datasets/weather/weather.csv"
+TRAIN="../../datasets/ETT-small/ETTh1.csv 
+    ../../datasets/ETT-small/ETTh2.csv
+    ../../datasets/ETT-small/ETTm1.csv
+    ../../datasets/ETT-small/ETTm2.csv
+    ../../datasets/electricity/electricity.csv
+    ../../datasets/exchange_rate/exchange_rate.csv
+    ../../datasets/traffic/traffic.csv
+    ../../datasets/weather/weather.csv"
 
 
-TEST="datasets/ETT-small/ETTh1.csv 
-    datasets/ETT-small/ETTh2.csv
-    datasets/ETT-small/ETTm1.csv
-    datasets/ETT-small/ETTm2.csv
-    datasets/electricity/electricity.csv
-    datasets/exchange_rate/exchange_rate.csv
-    datasets/traffic/traffic.csv
-    datasets/weather/weather.csv"
+TEST="../../datasets/ETT-small/ETTh1.csv 
+    ../../datasets/ETT-small/ETTh2.csv
+    ../../datasets/ETT-small/ETTm1.csv
+    ../../datasets/ETT-small/ETTm2.csv
+    ../../datasets/electricity/electricity.csv
+    ../../datasets/exchange_rate/exchange_rate.csv
+    ../../datasets/traffic/traffic.csv
+    ../../datasets/weather/weather.csv"
 
-PROMPT="prompt_bank/prompt_data_normalize_split"
+PROMPT="../../prompt_bank/prompt_data_normalize_split"
 
 epoch=1000
 downsample_rate=20

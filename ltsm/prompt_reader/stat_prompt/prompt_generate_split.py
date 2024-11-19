@@ -9,18 +9,18 @@ import matplotlib.pyplot as plt
 import sys, os
 import torch
 
-def parse_list(arg):
-    """parse a string of comma-separated values into a list
-    e.g. python ./ltsm/prompt_reader/stat_prompt/prompt_generate_split.py --dataset_name ETT-small, illness
-    """
-    return arg.split(',')
+# def parse_list(arg):
+#     """parse a string of comma-separated values into a list
+#     e.g. python ./ltsm/prompt_reader/stat_prompt/prompt_generate_split.py --dataset_name ETT-small, illness
+#     """
+#     return arg.split(',')
 
 def get_args():
     parser = argparse.ArgumentParser(description='LTSM')
 
     parser.add_argument('--root_path', type=str, default='./datasets/', help='Root path for datasets')
     parser.add_argument('--output_path', type=str, default='./prompt_bank/stat-prompt/prompt_data_split/', help='Output path for prompt data')
-    parser.add_argument('--dataset_name', type=parse_list, default=[])
+    parser.add_argument('--dataset_name', nargs='+', default=[])
     parser.add_argument('--save_format', type=str, default='pth.tar',choices=["pth.tar", "csv", "npz"], help='The format to save the data')
     parser.add_argument('--test', type=bool, default=False)
 
@@ -71,7 +71,16 @@ def prompt_generation(ts, ts_name):
         return None
 
     else:
-        column_name = [name.replace("/", "-") for name in list(ts.columns)]
+        #column_name = [name.replace("/", "-") for name in list(ts.columns)]
+        column_name_map = {}
+        column_name = []
+        for i, name in enumerate(ts.columns):
+            if not name.isnumeric():
+                new_name = str(i)
+            else:
+                new_name = name
+            column_name.append(new_name)
+            column_name_map[name] = new_name
         prompt_buf_train = pd.DataFrame(np.zeros((133, ts.shape[1])), columns=column_name)
         prompt_buf_val = pd.DataFrame(np.zeros((133, ts.shape[1])), columns=column_name)
         prompt_buf_test = pd.DataFrame(np.zeros((133, ts.shape[1])), columns=column_name)
@@ -89,9 +98,13 @@ def prompt_generation(ts, ts_name):
             prompt_val = prompt_generation_single(ts_val)
             prompt_test = prompt_generation_single(ts_test)
 
-            prompt_buf_train[index.replace("/", "-")] = prompt_train.T.values
-            prompt_buf_val[index.replace("/", "-")] = prompt_val.T.values
-            prompt_buf_test[index.replace("/", "-")] = prompt_test.T.values
+            # prompt_buf_train[index.replace("/", "-")] = prompt_train.T.values
+            # prompt_buf_val[index.replace("/", "-")] = prompt_val.T.values
+            # prompt_buf_test[index.replace("/", "-")] = prompt_test.T.values
+            new_index = column_name_map[index]
+            prompt_buf_train[new_index] = prompt_train.T.values
+            prompt_buf_val[new_index] = prompt_val.T.values
+            prompt_buf_test[new_index] = prompt_test.T.values
 
     prompt_buf_total = {"train": prompt_buf_train, "val": prompt_buf_val, "test": prompt_buf_test}
     print(prompt_buf_total)
