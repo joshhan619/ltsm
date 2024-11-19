@@ -51,8 +51,6 @@ class TrainingPipeline():
             - Evaluating the model on test datasets and logging metrics.
         """
         logging.info(self.args)
-    
-        model = self.model_manager.create_model()
         
         # Training settings
         training_args = TrainingArguments(
@@ -75,6 +73,9 @@ class TrainingPipeline():
 
         train_dataset, eval_dataset, test_datasets, _ = get_datasets(self.args)
         train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
+
+        self.model_manager.args.patch_num = train_dataset[0]["input_data"].size()[0]
+        model = self.model_manager.create_model()
         
         trainer = Trainer(
             model=model,
@@ -161,6 +162,19 @@ def get_args():
     parser.add_argument('--lradj', type=str, default='type1', help='learning rate adjustment type')
     parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=64, help='gradient accumulation steps')
+
+    # PatchTST
+    parser.add_argument('--fc_dropout', type=float, default=0.05, help='fully connected dropout')
+    parser.add_argument('--head_dropout', type=float, default=0.0, help='head dropout')
+    parser.add_argument('--patch_len', type=int, default=16, help='patch length')
+    parser.add_argument('--padding_patch', default='end', help='None: None; end: padding on the end')
+    parser.add_argument('--revin', type=int, default=1, help='RevIN; True 1 False 0')
+    parser.add_argument('--affine', type=int, default=0, help='RevIN-affine; True 1 False 0')
+    parser.add_argument('--subtract_last', type=int, default=0, help='0: subtract mean; 1: subtract last')
+    parser.add_argument('--decomposition', type=int, default=0, help='decomposition; True 1 False 0')
+    parser.add_argument('--kernel_size', type=int, default=25, help='decomposition-kernel')
+    parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0')
+
     args, unknown = parser.parse_known_args()
 
     return args
