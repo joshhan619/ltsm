@@ -30,7 +30,8 @@ def setup(tmp_path):
         train_ratio=0.7,
         val_ratio=0.1,
         model="",
-        scale_on_train=True
+        scale_on_train=True,
+        do_anomaly=False
     )
 
 # Save functions for threes different formats
@@ -192,7 +193,7 @@ def test_data_factory_load_missing_prompts(setup):
 
 def test_data_factory_createTorchDS_empty(setup):
     data_path, prompt_data_path, prompt_data_folder, datasetFactory = setup
-    dataset = datasetFactory.createTorchDS([], [], 1)
+    dataset = datasetFactory.createTorchDS([], [], 1, False)
     assert dataset is None
 
 def test_data_factory_createTorchDS(setup):
@@ -202,7 +203,7 @@ def test_data_factory_createTorchDS(setup):
     prompt_len = 10
     data = [np.array([2*i for i in range(100)])]
     prompt_data = [[0.1*i for i in range(10)]]
-    dataset = datasetFactory.createTorchDS(data, prompt_data, 1)
+    dataset = datasetFactory.createTorchDS(data, prompt_data, 1, False)
     assert type(dataset) == TSPromptDataset
     for i in range(len(dataset)):
         x = dataset[i][0]
@@ -223,7 +224,7 @@ def test_data_factory_createTorchDS_tokenizer(setup):
     datasetFactory.model = "LTSM_Tokenizer"
     data = [np.array([2*i for i in range(100)])]
     prompt_data = [[0.1*i for i in range(10)]]
-    dataset = datasetFactory.createTorchDS(data, prompt_data, 1)
+    dataset = datasetFactory.createTorchDS(data, prompt_data, 1, False)
     assert type(dataset) == TSTokenDataset
 
 

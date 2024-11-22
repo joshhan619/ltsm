@@ -31,7 +31,7 @@ class SplitterByTimestamp(DataSplitter):
         self.val_ratio = val_ratio
 
 
-    def get_csv_splits(self, df_data: pd.DataFrame) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+    def get_csv_splits(self, df_data: pd.DataFrame, do_anomaly: bool=False) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
         """
         Splits the .csv data into training-validation-training sets.
 
@@ -54,8 +54,12 @@ class SplitterByTimestamp(DataSplitter):
             num_train = int(len(sequence) * self.train_ratio)
             num_val = int(len(sequence) * self.val_ratio)
             
-            if num_train < self.seq_len + self.pred_len:
-                continue
+            if not do_anomaly:
+                if num_train < self.seq_len + self.pred_len:
+                    continue
+            else:
+                if num_train < self.seq_len:
+                    continue
             
             
             # We also add the previous seq_len points to the val and test sets
