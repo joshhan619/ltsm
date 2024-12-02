@@ -74,7 +74,12 @@ class TrainingPipeline():
         train_dataset, eval_dataset, test_datasets, _ = get_datasets(self.args)
         train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
 
-        self.model_manager.args.patch_num = train_dataset[0]["input_data"].size()[0]
+        if self.args.model == 'PatchTST':
+            # Set the patch number to the size of the input sequence including the prompt sequence
+            self.model_manager.args.patch_num = train_dataset[0]["input_data"].size()[0]
+        elif self.args.model == 'DLinear':
+            self.model_manager.args.seq_len = train_dataset[0]["input_data"].size()[0]
+        
         model = self.model_manager.create_model()
         
         trainer = Trainer(
