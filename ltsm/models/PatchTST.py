@@ -17,20 +17,20 @@ class PatchTST(PreTrainedModel):
         if self.decomposition:
             self.decomp_module = series_decomp(config.kernel_size)
             self.model_trend = PatchTST_backbone(config.enc_in, 
-                                                 config.patch_num, 
+                                                 config.seq_len, 
                                                  config.pred_len, 
                                                  config.patch_len, 
                                                  config.stride,
                                                  **kwargs)
             self.model_res = PatchTST_backbone(config.enc_in, 
-                                               config.patch_num, 
+                                               config.seq_len, 
                                                config.pred_len, 
                                                config.patch_len, 
                                                config.stride,
                                                **kwargs)
         else:
             self.model = PatchTST_backbone(config.enc_in, 
-                                           config.patch_num, 
+                                           config.seq_len, 
                                            config.pred_len, 
                                            config.patch_len, 
                                            config.stride,

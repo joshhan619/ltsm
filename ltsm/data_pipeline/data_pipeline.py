@@ -74,10 +74,8 @@ class TrainingPipeline():
         train_dataset, eval_dataset, test_datasets, _ = get_datasets(self.args)
         train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
 
-        if self.args.model == 'PatchTST':
+        if self.args.model == 'PatchTST' or self.args.model == 'DLinear':
             # Set the patch number to the size of the input sequence including the prompt sequence
-            self.model_manager.args.patch_num = train_dataset[0]["input_data"].size()[0]
-        elif self.args.model == 'DLinear':
             self.model_manager.args.seq_len = train_dataset[0]["input_data"].size()[0]
         
         model = self.model_manager.create_model()
@@ -179,6 +177,8 @@ def get_args():
     parser.add_argument('--decomposition', type=int, default=0, help='decomposition; True 1 False 0')
     parser.add_argument('--kernel_size', type=int, default=25, help='decomposition-kernel')
     parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0')
+    parser.add_argument('--e_layers', type=int, default=2, help='num of encoder layers')
+    parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
 
     args, unknown = parser.parse_known_args()
 
