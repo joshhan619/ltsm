@@ -51,10 +51,11 @@ def test_parameter_count(config):
     assert param_count == expected_param_count
 
 def test_forward_output_shape(config):
+    torch.set_default_dtype(torch.float64)
     model = get_model(config)
     batch_size = 32
     channel = 16
     input_length = config.seq_len
-    input = torch.tensor(np.zeros((batch_size, input_length, channel))).float()
+    input = torch.tensor(np.zeros((batch_size, input_length, channel)))
     output = model(input)
     assert output.size() == torch.Size([batch_size, config.pred_len, channel])

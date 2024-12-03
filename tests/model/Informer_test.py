@@ -119,12 +119,13 @@ def test_parameter_count(config):
 
 
 def test_forward_output_shape(config):
+    torch.set_default_dtype(torch.float64)
     model = get_model(config)
     batch_size = 32
     input_length = config.seq_len
-    input = torch.tensor(np.zeros((batch_size, input_length, config.enc_in))).float()
-    input_mark = torch.tensor(np.zeros((batch_size, input_length, 4))).float()
-    dec_inp = torch.tensor(np.zeros((batch_size, input_length, config.dec_in))).float()
-    dec_mark = torch.tensor(np.zeros((batch_size, input_length, 4))).float()
+    input = torch.tensor(np.zeros((batch_size, input_length, config.enc_in)))
+    input_mark = torch.tensor(np.zeros((batch_size, input_length, 4)))
+    dec_inp = torch.tensor(np.zeros((batch_size, input_length, config.dec_in)))
+    dec_mark = torch.tensor(np.zeros((batch_size, input_length, 4)))
     output = model(input, input_mark, dec_inp, dec_mark)
     assert output.size() == torch.Size([batch_size, config.pred_len, config.c_out])

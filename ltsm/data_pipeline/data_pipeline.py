@@ -148,7 +148,7 @@ def get_args():
     parser.add_argument('--pretrain', type=int, default=1, help='is pretrain')
     parser.add_argument('--local_pretrain', type=str, default="None", help='local pretrain weight')
     parser.add_argument('--freeze', type=int, default=1, help='is model weight frozen')
-    parser.add_argument('--model', type=str, default='model', help='model name, , options:[LTSM, LTSM_WordPrompt, LTSM_Tokenizer]')
+    parser.add_argument('--model', type=str, default='model', help='model name, , options:[LTSM, LTSM_WordPrompt, LTSM_Tokenizer, DLinear, PatchTST, Informer]')
     parser.add_argument('--stride', type=int, default=8, help='stride')
     parser.add_argument('--tmax', type=int, default=10, help='tmax')
     parser.add_argument('--dropout', type=float, default=0.05, help='dropout')
