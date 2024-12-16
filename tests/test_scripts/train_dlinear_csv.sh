@@ -25,7 +25,7 @@ declare -a features=(7 7 7 7 321 862 8 21)
 
 for index in "${!data_paths[@]}";
 do
-  CUDA_VISIBLE_DEVICES=0,1,2,3 python3 main_ltsm.py --config "patchtst.json" --data_path ${data_paths[$index]} --data ${data[$index]} --enc_in ${features[$index]}
+  CUDA_VISIBLE_DEVICES=0,1,2,3 python3 main_ltsm.py --config "dlinear.json" --data_path ${data_paths[$index]} --data ${data[$index]} --enc_in ${features[$index]}
 done
 ' > output.log 2>&1 &
 echo $! > save_pid.txt
