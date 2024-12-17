@@ -28,9 +28,11 @@ declare -a batch_sizes=(128 128 128 128 32 24 128 128)
 for index in "${!data_paths[@]}";
 do
   CUDA_VISIBLE_DEVICES=0,1,2,3 python3 main_ltsm.py \
-  --config "dlinear.json" --data_path ${data_paths[$index]} \
+  --config "informer.json" \
+  --data_path ${data_paths[$index]} \
   --data ${data[$index]} \
   --enc_in ${features[$index]} \
+  --c_out ${features[$index]} \
   --batch_size ${batch_sizes[$index]}
 done
 ' > output.log 2>&1 &

@@ -6,7 +6,7 @@ import random
 import ipdb
 
 from ltsm.data_provider.data_factory import get_datasets
-from ltsm.data_provider.data_loader import HF_Dataset
+from ltsm.data_provider.data_loader import HF_Dataset, HF_Timestamp_Dataset
 from ltsm.data_pipeline.model_manager import ModelManager
 
 import logging
@@ -73,7 +73,10 @@ class TrainingPipeline():
         )
 
         train_dataset, eval_dataset, test_datasets, _ = get_datasets(self.args)
-        train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
+        if self.args.model == "Informer":
+            train_dataset, eval_dataset = HF_Timestamp_Dataset(train_dataset), HF_Timestamp_Dataset(eval_dataset)
+        else:
+            train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
         
         model = self.model_manager.create_model()
         
@@ -100,7 +103,11 @@ class TrainingPipeline():
 
         # Testing settings
         for test_dataset in test_datasets:
-            test_ds = HF_Dataset(test_dataset)
+            if self.args.model == "Informer":
+                test_ds = HF_Timestamp_Dataset(test_dataset)
+            else:
+                test_ds = HF_Dataset(test_dataset)
+                
             trainer.compute_loss = self.model_manager.compute_loss
             trainer.prediction_step = self.model_manager.prediction_step
 
