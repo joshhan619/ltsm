@@ -33,7 +33,8 @@ class DatasetFactory:
         model: str= None,
         scale_on_train: bool = False, 
         downsample_rate: int = 10,
-        split_test_sets: bool = True
+        split_test_sets: bool = True,
+        do_anomaly: bool = False
     ):
         """
         Initializes the DatasetFactory with the given arguments.
@@ -59,6 +60,7 @@ class DatasetFactory:
         self.scale_on_train = scale_on_train
         self.downsample_rate = downsample_rate
         self.split_test_sets = split_test_sets
+        self.do_anomaly = do_anomaly
 
         # Initialize dataset splitter
         self.splitter = SplitterByTimestamp(
@@ -169,6 +171,8 @@ class DatasetFactory:
                 prompt_data.append([self.data_paths.index(data_path)])
         else:
             for instance_idx in buff:
+                if instance_idx == 'anomaly':
+                    continue # anomaly is the label for anomaly data, no prompt data is available
                 instance_prompt = self.__get_prompt(
                     prompt_data_path,  
                     data_path,
@@ -183,7 +187,7 @@ class DatasetFactory:
 
         return prompt_data, missing
     
-    def createTorchDS(self, data: List[np.ndarray], prompt_data: List[List[np.float64]], downsample_rate: int)->TSDataset:
+    def createTorchDS(self, data: List[np.ndarray], prompt_data: List[List[np.float64]], downsample_rate: int, do_anomaly:bool)->TSDataset:
         """
         Creates a pyTorch Dataset from a list of sequences and a list of their corresponding prompts.
 
@@ -204,7 +208,8 @@ class DatasetFactory:
                 prompt=prompt_data,
                 seq_len=self.seq_len,
                 pred_len=self.pred_len,
-                downsample_rate=downsample_rate
+                downsample_rate=downsample_rate,
+                do_anomaly=do_anomaly
             )
         else:
             return TSPromptDataset(
@@ -212,7 +217,8 @@ class DatasetFactory:
                 prompt=prompt_data,
                 seq_len=self.seq_len,
                 pred_len=self.pred_len,
-                downsample_rate=downsample_rate
+                downsample_rate=downsample_rate,
+                do_anomaly=do_anomaly
             )
 
     def getDatasets(self)->Tuple[TSDataset, TSDataset, List[TSDataset]]:
@@ -232,9 +238,16 @@ class DatasetFactory:
         for data_path in self.data_paths:
             # Step 0: Read data, the output is a list of 1-d time-series
             df_data = self.fetch(data_path)
+            #print(df_data.index)
+            #print(df_data.loc['anomaly'].iloc[:20])
+            #print(df_data.shape)
 
             # Step 1: Get train, val, and test splits
-            sub_train_data, sub_val_data, sub_test_data, buff = self.splitter.get_csv_splits(df_data)
+            sub_train_data, sub_val_data, sub_test_data, buff = self.splitter.get_csv_splits(df_data, self.do_anomaly)
+            # print(len(sub_train_data), len(sub_val_data), len(sub_test_data))
+            # print(sub_train_data[0].shape, sub_val_data[0].shape, sub_test_data[0].shape)
+            #print(sub_train_data[-1][:10])
+            
 
             # Step 2: Scale the datasets. We fit on the whole sequence by default.
             # To fit on the train sequence only, set scale_on_train=True
@@ -243,8 +256,10 @@ class DatasetFactory:
                 train_data=sub_train_data,
                 val_data=sub_val_data,
                 test_data=sub_test_data,
-                fit_train_only=self.scale_on_train
+                fit_train_only=self.scale_on_train,
+                do_anomaly=self.do_anomaly
             )
+            #print(type(sub_train_data), type(sub_val_data), type(sub_test_data))
             logging.info(f"Data {data_path} has been split into train, val, test sets with the following shapes: {sub_train_data[0].shape}, {sub_val_data[0].shape}, {sub_test_data[0].shape}")
 
             # Step 2.5: Load prompt for each instance
@@ -276,28 +291,53 @@ class DatasetFactory:
             val_prompts = [data for data, instance_idx in zip(val_prompts, buff) if instance_idx not in missing]
             sub_test_prompt_data = [data for data, instance_idx in zip(sub_test_prompt_data, buff) if instance_idx not in missing]
 
+            # print(len(sub_train_data), len(sub_val_data), len(sub_test_data))
+            # print(sub_train_data[0].shape, sub_val_data[0].shape, sub_test_data[0].shape)
+
+            if self.do_anomaly:
+                label_train = sub_train_data[-1]
+                label_val = sub_val_data[-1]
+                label_test = sub_test_data[-1]
+
+                sub_train_data = [[(x,y) for x,y in zip(data, label_train)] for data in sub_train_data[:-1]]
+                sub_val_data = [[(x,y) for x,y in zip(data, label_val)] for data in sub_val_data[:-1]]
+                sub_test_data = [[(x,y) for x,y in zip(data, label_test)] for data in sub_test_data[:-1]]
+
+                # print(len(sub_train_data), len(sub_val_data), len(sub_test_data))
+                # print(sub_train_data[0][0:2], sub_val_data[0][0:2], sub_test_data[0][0:2])
+                
+
             train_prompt_data.extend(train_prompts)
             val_prompt_data.extend(val_prompts)
             
             train_data.extend(sub_train_data)
             val_data.extend(sub_val_data)
 
+            
+
+
             if self.split_test_sets:
                 # Create a Torch dataset for each sub test dataset
-                test_ds_list.append(self.createTorchDS(sub_test_data, sub_test_prompt_data, 1))
+                test_ds_list.append(self.createTorchDS(sub_test_data, sub_test_prompt_data, 1, self.do_anomaly))
             else:
                 test_data.extend(sub_test_data)
                 test_prompt_data.extend(sub_test_prompt_data)
         
         # Step 3: Create Torch datasets (samplers)
-        train_ds = self.createTorchDS(train_data, train_prompt_data, self.downsample_rate)
+        # print("====================================")
+        # print("len(train_data):", len(train_data))
+        # print("len(train_data[0]):", len(train_data[0]),len(train_data[1]))
+        # print("len(train_data[-1]):",len(train_data[-1]),len(train_data[-2]))
+        # print("====================================")
+        
+        train_ds = self.createTorchDS(train_data, train_prompt_data, self.downsample_rate, self.do_anomaly)
         if os.path.split(os.path.dirname(self.data_paths[0]))[-1] == "monash":
-            val_ds = self.createTorchDS(val_data, val_prompt_data, 54)
+            val_ds = self.createTorchDS(val_data, val_prompt_data, 54, self.do_anomaly)
         else:
-            val_ds = self.createTorchDS(val_data, val_prompt_data, self.downsample_rate)
+            val_ds = self.createTorchDS(val_data, val_prompt_data, self.downsample_rate, self.do_anomaly)
 
         if not self.split_test_sets:
-            test_ds_list.append(self.createTorchDS(test_data, test_prompt_data, 1))
+            test_ds_list.append(self.createTorchDS(test_data, test_prompt_data, 1, self.do_anomaly))
         
         return train_ds, val_ds, test_ds_list
 
@@ -313,7 +353,9 @@ def get_datasets(args):
             train_ratio=args.train_ratio,
             val_ratio=args.val_ratio,
             model=args.model,
-            split_test_sets=False
+            split_test_sets=False,
+            downsample_rate=args.downsample_rate,
+            do_anomaly=args.do_anomaly
         )
         train_dataset, val_dataset, test_datasets = dataset_factory.getDatasets()
         processor = dataset_factory.processor

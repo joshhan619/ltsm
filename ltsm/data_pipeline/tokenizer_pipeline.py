@@ -1,13 +1,20 @@
+"""Pipeline for tokenizer-ltsm.
+   Task: Time Series Forecasting.
+"""
+
 import numpy as np
 import torch
 import argparse
-import json
 import random
 import ipdb
+from torch import nn
 
 from ltsm.data_provider.data_factory import get_datasets
-from ltsm.data_provider.data_loader import HF_Dataset, HF_Timestamp_Dataset
+from ltsm.data_provider.data_loader import HF_Dataset
 from ltsm.data_pipeline.model_manager import ModelManager
+from ltsm.data_provider.tokenizer.tokenizer_processor import TokenizerConfig
+from ltsm.models import get_model, LTSMConfig
+from peft import get_peft_model, LoraConfig
 
 import logging
 from transformers import (
@@ -20,7 +27,102 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
 )
 
-class TrainingPipeline():
+class TokenizerModelManager(ModelManager):
+   def __init__(self, args: argparse.Namespace):
+         """
+         Initializes the ModelManager with provided arguments and default values for model, optimizer, and scheduler.
+   
+         Args:
+               args (argparse.Namespace): Training configurations and hyperparameters.
+         """
+         super().__init__(args)
+         self.tokenizer = None
+   def create_tokenizer(self):
+      context_length = self.args.seq_len+self.args.pred_len
+      prediction_length = self.args.pred_len
+      n_tokens = 1024
+      n_special_tokens = 2
+      config = TokenizerConfig(
+         tokenizer_class="MeanScaleUniformBins",
+         tokenizer_kwargs=dict(low_limit=-3.0, high_limit=3.0),
+         n_tokens=n_tokens,
+         n_special_tokens=n_special_tokens,
+         pad_token_id=0,
+         eos_token_id=1,
+         use_eos_token=0,
+         model_type="causal",
+         context_length=context_length,
+         prediction_length=prediction_length,
+         num_samples=20,
+         temperature=1.0,
+         top_k=50,
+         top_p=1.0,
+      )
+
+      self.tokenizer = config.create_tokenizer()
+   def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        Computes the loss for model training.
+
+        Args:
+            model (torch.nn.Module): The model used for predictions.
+            inputs (dict): Input data and labels.
+            return_outputs (bool): If True, returns both loss and model outputs.
+
+        Returns:
+            torch.Tensor or tuple: The computed loss, and optionally the outputs.
+        """
+        outputs = model(inputs["input_data"])
+        B, L, M, _ = outputs.shape
+        loss = nn.functional.cross_entropy(outputs.reshape(B*L,-1), inputs["labels"][:,1:].long().reshape(B*L))
+        return (loss, outputs) if return_outputs else loss
+   
+   @torch.no_grad()
+   def prediction_step(self, model, inputs, prediction_loss_only=False, ignore_keys=None):
+        input_data = inputs["input_data"].to(model.module.device)
+        labels = inputs["labels"].to(model.module.device)
+        scale = labels[:,0]
+        labels = labels[:,1:]
+        outputs = model(input_data)
+        indices = torch.max(outputs, dim=-1).indices
+
+        output_value = self.tokenizer.output_transform(indices, scale)
+        label_value = self.tokenizer.output_transform(labels.unsqueeze(-1).long(), scale)
+        loss = nn.functional.mse_loss(output_value, label_value)
+        return (loss, output_value, label_value)
+   
+   def create_model(self):
+      """
+        Initializes and configures the model based on specified arguments, including options for
+        freezing parameters or applying LoRA (Low-Rank Adaptation).
+
+        Returns:
+            torch.nn.Module: The configured model ready for training.
+        """
+      model_config = LTSMConfig(**vars(self.args))
+      self.model = get_model(model_config)
+
+      if self.args.lora:
+         peft_config = LoraConfig(
+                target_modules=["c_attn"],
+                inference_mode=False,
+                r=self.args.lora_dim,
+                lora_alpha=32,
+                lora_dropout=0.1
+            )
+         self.model = get_peft_model(self.model, peft_config)
+         self.model.print_trainable_parameters()
+        
+      elif self.args.freeze:
+         self.freeze_parameters()
+
+      self.print_trainable_parameters()
+      self.create_tokenizer()
+
+        # Optimizer settings
+      return self.model
+
+class TokenizerTrainingPipeline():
     """
     A pipeline for managing the training and evaluation process of a machine learning model.
 
@@ -37,7 +139,7 @@ class TrainingPipeline():
                                        learning rate, and other hyperparameters.
         """
         self.args = args
-        self.model_manager = ModelManager(args)
+        self.model_manager = TokenizerModelManager(args)
 
     def run(self):
         """
@@ -52,6 +154,8 @@ class TrainingPipeline():
             - Evaluating the model on test datasets and logging metrics.
         """
         logging.info(self.args)
+    
+        model = self.model_manager.create_model()
         
         # Training settings
         training_args = TrainingArguments(
@@ -73,12 +177,7 @@ class TrainingPipeline():
         )
 
         train_dataset, eval_dataset, test_datasets, _ = get_datasets(self.args)
-        if self.args.model == "Informer":
-            train_dataset, eval_dataset = HF_Timestamp_Dataset(train_dataset), HF_Timestamp_Dataset(eval_dataset)
-        else:
-            train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
-        
-        model = self.model_manager.create_model()
+        train_dataset, eval_dataset= HF_Dataset(train_dataset), HF_Dataset(eval_dataset)
         
         trainer = Trainer(
             model=model,
@@ -103,24 +202,16 @@ class TrainingPipeline():
 
         # Testing settings
         for test_dataset in test_datasets:
-            if self.args.model == "Informer":
-                test_ds = HF_Timestamp_Dataset(test_dataset)
-            else:
-                test_ds = HF_Dataset(test_dataset)
-                
             trainer.compute_loss = self.model_manager.compute_loss
             trainer.prediction_step = self.model_manager.prediction_step
             test_dataset = HF_Dataset(test_dataset)
 
-            metrics = trainer.evaluate(test_ds)
+            metrics = trainer.evaluate(test_dataset)
             trainer.log_metrics("Test", metrics)
             trainer.save_metrics("Test", metrics)
 
-def get_args():
+def tokenizer_get_args():
     parser = argparse.ArgumentParser(description='LTSM')
-    
-    # Load JSON config file
-    parser.add_argument('--config', type=str, help='Path to JSON configuration file')
 
     # Basic Config
     parser.add_argument('--model_id', type=str, default='test_run', help='model id')
@@ -130,9 +221,8 @@ def get_args():
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/')
 
     # Data Settings
-    parser.add_argument('--data', help='dataset type')
     parser.add_argument('--data_path', nargs='+', default='dataset/weather.csv', help='data files')
-    parser.add_argument('--test_data_path_list', nargs='+', help='test data file')
+    parser.add_argument('--test_data_path_list', nargs='+', required=True, help='test data file')
     parser.add_argument('--prompt_data_path', type=str, default='./weather.csv', help='prompt data file')
     parser.add_argument('--data_processing', type=str, default="standard_scaler", help='data processing method')
     parser.add_argument('--train_ratio', type=float, default=0.7, help='train data ratio')
@@ -153,30 +243,14 @@ def get_args():
     parser.add_argument('--d_ff', type=int, default=512, help='dimension of fcn')
     parser.add_argument('--dropout', type=float, default=0.2, help='dropout')
     parser.add_argument('--enc_in', type=int, default=1, help='encoder input size')
-    parser.add_argument('--dec_in', type=int, default=7, help='decoder input size')
     parser.add_argument('--c_out', type=int, default=862, help='output size')
     parser.add_argument('--patch_size', type=int, default=16, help='patch size')
     parser.add_argument('--pretrain', type=int, default=1, help='is pretrain')
     parser.add_argument('--local_pretrain', type=str, default="None", help='local pretrain weight')
     parser.add_argument('--freeze', type=int, default=1, help='is model weight frozen')
-    parser.add_argument('--model', type=str, default='model', help='model name, , options:[LTSM, LTSM_WordPrompt, LTSM_Tokenizer, DLinear, PatchTST, Informer]')
+    parser.add_argument('--model', type=str, default='model', help='model name, , options:[LTSM, LTSM_WordPrompt, LTSM_Tokenizer]')
     parser.add_argument('--stride', type=int, default=8, help='stride')
     parser.add_argument('--tmax', type=int, default=10, help='tmax')
-    parser.add_argument('--embed', type=str, default='timeF',
-                        help='time features encoding, options:[timeF, fixed, learned]')
-    parser.add_argument('--activation', type=str, default='gelu', help='activation')
-    parser.add_argument('--output_attention', action='store_true', help='whether to output attention in ecoder')
-    parser.add_argument('--do_predict', action='store_true', help='whether to predict unseen future data')
-    parser.add_argument('--moving_avg', type=int, default=25, help='window size of moving average')
-    parser.add_argument('--factor', type=int, default=1, help='attn factor')
-    parser.add_argument('--distil', action='store_false',
-                        help='whether to use distilling in encoder, using this argument means not using distilling',
-                        default=True)
-    parser.add_argument('--e_layers', type=int, default=2, help='num of encoder layers')
-    parser.add_argument('--d_layers', type=int, default=1, help='num of decoder layers')
-    parser.add_argument('--embed_type', type=int, default=0, help='0: default 1: value embedding + temporal embedding + positional embedding 2: value embedding + temporal embedding 3: value embedding + positional embedding 4: value embedding')
-    parser.add_argument('--freq', type=str, default='h',
-                        help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
     
     # Training Settings 
     parser.add_argument('--eval', type=int, default=0, help='evaluation')
@@ -192,34 +266,11 @@ def get_args():
     parser.add_argument('--lradj', type=str, default='type1', help='learning rate adjustment type')
     parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=64, help='gradient accumulation steps')
-    
-
-    # PatchTST
-    parser.add_argument('--fc_dropout', type=float, default=0.05, help='fully connected dropout')
-    parser.add_argument('--head_dropout', type=float, default=0.0, help='head dropout')
-    parser.add_argument('--patch_len', type=int, default=16, help='patch length')
-    parser.add_argument('--padding_patch', default='end', help='None: None; end: padding on the end')
-    parser.add_argument('--revin', type=int, default=1, help='RevIN; True 1 False 0')
-    parser.add_argument('--affine', type=int, default=0, help='RevIN-affine; True 1 False 0')
-    parser.add_argument('--subtract_last', type=int, default=0, help='0: subtract mean; 1: subtract last')
-    parser.add_argument('--decomposition', type=int, default=0, help='decomposition; True 1 False 0')
-    parser.add_argument('--kernel_size', type=int, default=25, help='decomposition-kernel')
-    parser.add_argument('--individual', type=int, default=0, help='individual head; True 1 False 0')
-    
     args, unknown = parser.parse_known_args()
-
-    if args.config:
-        with open(args.config, 'r') as f:
-            config = json.load(f)
-            json_args = argparse.Namespace(**config)
-
-            for key, value in vars(json_args).items():
-                setattr(args, key, value)
 
     return args
 
-
-def seed_all(fixed_seed):
+def tokenizer_seed_all(fixed_seed):
     random.seed(fixed_seed)
     torch.manual_seed(fixed_seed)
     np.random.seed(fixed_seed)
