@@ -25,9 +25,6 @@
     "downsample_rate": 20,
     "output_dir": "output/patchtst/",
     "eval": 0,
-    "fc_dropout": 0.05,
-    "head_dropout": 0.0,
-    "patch_len": 16,
     "padding_patch": "end",
     "affine": 0,
     "subtract_last": 0,
@@ -39,7 +36,6 @@
     "factor": 1,
     "distil": 1,
     "embed_type": 0,
-    "dec_in": 7,
     "activation": "gelu",
     "features": "M"
 }

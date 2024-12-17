@@ -32,6 +32,7 @@ do
   --data_path ${data_paths[$index]} \
   --data ${data[$index]} \
   --enc_in ${features[$index]} \
+  --dec_in ${features[$index]} \
   --c_out ${features[$index]} \
   --batch_size ${batch_sizes[$index]}
 done
